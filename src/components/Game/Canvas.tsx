@@ -5,8 +5,9 @@ import GameLoop from '../../core/GameLoop';
 import InputManager from '../../core/InputManager';
 import SoundManager from '../../core/SoundManager';
 import Player from '../../entities/Player';
-import ObstacleManager from '../../entities/ObstacleManager';
+import ObstacleManager, { CollisionResult } from '../../entities/ObstacleManager';
 import HighScores from './HighScores';
+import { isMobileDevice } from '../../utils/device';
 
 // Define game window properties
 interface GameProps {
@@ -31,6 +32,14 @@ interface FloatingScore {
   maxLife: number;
 }
 
+// Background image type definitions
+interface BackgroundImages {
+  sky: HTMLImageElement | null;
+  mountains: HTMLImageElement | null;
+  buildings: HTMLImageElement | null;
+  ground: HTMLImageElement | null;
+}
+
 export const Canvas: React.FC<GameProps> = ({ 
   width = 800, 
   height = 500,
@@ -45,6 +54,95 @@ export const Canvas: React.FC<GameProps> = ({
   const [debug, setDebug] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isHighScoresOpen, setIsHighScoresOpen] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  
+  // Background image references
+  const backgroundImagesRef = useRef<BackgroundImages>({
+    sky: null,
+    mountains: null,
+    buildings: null,
+    ground: null
+  });
+  const [backgroundImagesLoaded, setBackgroundImagesLoaded] = useState<boolean>(false);
+  
+  // Game asset loader
+  const [images, setImages] = useState<{[key: string]: HTMLImageElement}>({});
+  
+  // Load image utility
+  const loadImage = (key: keyof typeof images, src: string) => {
+    return new Promise<void>((resolve, reject) => {
+      const img = new Image();
+      img.src = src;
+      
+      img.onload = () => {
+        setImages(prev => ({
+          ...prev,
+          [key]: img
+        }));
+        resolve();
+      };
+      
+      img.onerror = (err) => {
+        console.error(`Failed to load image: ${key}`, err);
+        reject(err);
+      };
+    });
+  };
+  
+  // Load background images
+  const loadBackgroundImages = useCallback(() => {
+    const imagesLoading = {
+      sky: new Image(),
+      mountains: new Image(),
+      buildings: new Image(),
+      ground: new Image()
+    };
+    
+    // Set image sources
+    imagesLoading.sky.src = '/images/background-sky.jpg';
+    imagesLoading.mountains.src = '/images/background-mountains.png';
+    imagesLoading.buildings.src = '/images/background-buildings.png';
+    imagesLoading.ground.src = '/images/background-ground.png';
+    
+    // Track loaded images
+    let loadedCount = 0;
+    const totalImages = Object.keys(imagesLoading).length;
+    
+    // Check if all background images are loaded
+    const checkAllLoaded = () => {
+      loadedCount++;
+      if (loadedCount === totalImages) {
+        backgroundImagesRef.current = imagesLoading;
+        setBackgroundImagesLoaded(true);
+        console.log('All background images loaded successfully');
+      }
+    };
+    
+    // Set up load and error handlers for each image
+    Object.keys(imagesLoading).forEach(key => {
+      const img = imagesLoading[key as keyof BackgroundImages];
+      
+      // If already loaded, count it
+      if (img.complete) {
+        checkAllLoaded();
+      } else {
+        img.onload = () => {
+          console.log(`Loaded background image: ${key}`);
+          checkAllLoaded();
+        };
+        
+        img.onerror = (err) => {
+          console.error(`Failed to load background image: ${key}`, err);
+          checkAllLoaded(); // Still count as loaded to avoid blocking the game
+        };
+      }
+    });
+  }, []);
+  
+  // Load background images on component mount
+  useEffect(() => {
+    loadBackgroundImages();
+  }, [loadBackgroundImages]);
   
   useEffect(() => {
     console.log('isHighScoresOpen state changed:', isHighScoresOpen);
@@ -198,6 +296,14 @@ export const Canvas: React.FC<GameProps> = ({
         try {
           ctx.fillStyle = '#111';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
+          
+          // Use background image for loading screen if loaded
+          if (backgroundImagesLoaded && backgroundImagesRef.current.sky) {
+            ctx.drawImage(
+              backgroundImagesRef.current.sky,
+              0, 0, canvas.width, canvas.height
+            );
+          }
           
           ctx.fillStyle = 'white';
           ctx.font = '24px Arial';
@@ -507,35 +613,105 @@ export const Canvas: React.FC<GameProps> = ({
             return;
           }
           
-          // Draw distant background (fixed)
-          ctx.fillStyle = '#222';
-          ctx.fillRect(0, 0, canvas.width, 400);
+          // Draw backgrounds with parallax effect
+          const bgImages = backgroundImagesRef.current;
           
-          // Draw middle-distance background elements with parallax
-          const parallaxOffset = cameraOffsetRef.current * 0.5;
-          
-          // Draw some background buildings (with parallax)
-          ctx.fillStyle = '#333';
-          for (let i = 0; i < 5; i++) {
-            const buildingX = ((i * 200) - (parallaxOffset % 200));
-            const buildingHeight = 100 + (i % 3) * 50;
-            ctx.fillRect(buildingX, 400 - buildingHeight, 100, buildingHeight);
+          // Draw sky (fixed background)
+          if (backgroundImagesLoaded && bgImages.sky) {
+            ctx.drawImage(bgImages.sky, 0, 0, canvas.width, canvas.height);
+          } else {
+            // Fallback if image not loaded
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, canvas.width, 400);
           }
           
-          // Draw ground with camera offset
-          ctx.fillStyle = '#3e291e'; // Dark brown for ground
-          ctx.fillRect(0, 400, canvas.width, 100);
-          
-          // Draw ground lines (perspective)
-          ctx.strokeStyle = '#4a3528';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          for (let i = 0; i < 20; i++) {
-            const lineX = ((i * 100) - (cameraOffsetRef.current % 100));
-            ctx.moveTo(lineX, 400);
-            ctx.lineTo(lineX + 60, 500);
+          // Draw distant mountains with slight parallax
+          if (backgroundImagesLoaded && bgImages.mountains) {
+            const mountainParallax = cameraOffsetRef.current * 0.2;
+            // Draw the image twice to create a seamless loop
+            ctx.drawImage(
+              bgImages.mountains,
+              -mountainParallax % bgImages.mountains.width,
+              50,
+              bgImages.mountains.width,
+              300
+            );
+            ctx.drawImage(
+              bgImages.mountains,
+              (-mountainParallax % bgImages.mountains.width) + bgImages.mountains.width,
+              50,
+              bgImages.mountains.width,
+              300
+            );
           }
-          ctx.stroke();
+          
+          // Draw middle-distance buildings with more parallax
+          if (backgroundImagesLoaded && bgImages.buildings) {
+            const buildingParallax = cameraOffsetRef.current * 0.5;
+            // Draw the image twice to create a seamless loop
+            ctx.drawImage(
+              bgImages.buildings,
+              -buildingParallax % bgImages.buildings.width,
+              150,
+              bgImages.buildings.width,
+              250
+            );
+            ctx.drawImage(
+              bgImages.buildings,
+              (-buildingParallax % bgImages.buildings.width) + bgImages.buildings.width,
+              150,
+              bgImages.buildings.width,
+              250
+            );
+          } else {
+            // Fallback if image not loaded - draw some buildings
+            ctx.fillStyle = '#333';
+            for (let i = 0; i < 5; i++) {
+              const buildingX = ((i * 200) - ((cameraOffsetRef.current * 0.5) % 200));
+              const buildingHeight = 100 + (i % 3) * 50;
+              ctx.fillRect(buildingX, 400 - buildingHeight, 100, buildingHeight);
+            }
+          }
+          
+          // Draw ground with camera offset and parallax
+          if (backgroundImagesLoaded && bgImages.ground) {
+            const groundParallax = cameraOffsetRef.current * 1.0; // Full parallax for ground
+            
+            // Draw the ground image twice to create a seamless loop
+            const groundWidth = bgImages.ground.width;
+            const groundHeight = 100;
+            const groundY = 400;
+            
+            ctx.drawImage(
+              bgImages.ground,
+              -groundParallax % groundWidth,
+              groundY,
+              groundWidth,
+              groundHeight
+            );
+            ctx.drawImage(
+              bgImages.ground,
+              (-groundParallax % groundWidth) + groundWidth,
+              groundY,
+              groundWidth,
+              groundHeight
+            );
+          } else {
+            // Fallback if image not loaded
+            ctx.fillStyle = '#3e291e'; // Dark brown for ground
+            ctx.fillRect(0, 400, canvas.width, 100);
+            
+            // Draw ground lines (perspective)
+            ctx.strokeStyle = '#4a3528';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < 20; i++) {
+              const lineX = ((i * 100) - (cameraOffsetRef.current % 100));
+              ctx.moveTo(lineX, 400);
+              ctx.lineTo(lineX + 60, 500);
+            }
+            ctx.stroke();
+          }
           
           // Draw obstacles
           obstacleManager.draw(ctx);

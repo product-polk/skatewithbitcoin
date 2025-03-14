@@ -52,6 +52,11 @@ export default class Player {
   // Debug
   public debug: boolean = false;
   
+  // Images for player and skateboard
+  private playerImages: {[key: string]: HTMLImageElement} = {};
+  private skateboardImage: HTMLImageElement | null = null;
+  private imagesLoaded: boolean = false;
+  
   constructor(config: PlayerConfig) {
     this.x = config.x;
     this.y = config.y;
@@ -61,7 +66,45 @@ export default class Player {
     this.jumpForce = config.jumpForce;
     this.gravity = config.gravity;
     
+    // Load player images
+    this.loadImages();
+    
     console.log('Player initialized with config:', config);
+  }
+  
+  /**
+   * Load all required player images
+   */
+  private loadImages(): void {
+    // Load player state images
+    const states = ['idle', 'skating', 'jumping', 'falling', 'grinding', 'crashed'];
+    
+    states.forEach(state => {
+      const img = new Image();
+      img.src = `/images/player-${state}.png`;
+      this.playerImages[state] = img;
+      
+      img.onload = () => {
+        console.log(`Loaded player image: ${state}`);
+      };
+      
+      img.onerror = (err) => {
+        console.error(`Failed to load player image: ${state}`, err);
+      };
+    });
+    
+    // Load skateboard image
+    this.skateboardImage = new Image();
+    this.skateboardImage.src = '/images/skateboard.png';
+    
+    this.skateboardImage.onload = () => {
+      console.log('Loaded skateboard image');
+      this.imagesLoaded = true;
+    };
+    
+    this.skateboardImage.onerror = (err) => {
+      console.error('Failed to load skateboard image', err);
+    };
   }
   
   /**
@@ -367,29 +410,6 @@ export default class Player {
       // Calculate screen position with camera offset
       const screenX = this.x - cameraOffset;
       
-      // Determine color based on state
-      let color;
-      switch (this.state) {
-        case 'idle':
-          color = '#777';
-          break;
-        case 'skating':
-          color = '#3498db';
-          break;
-        case 'jumping':
-        case 'falling':
-          color = '#2ecc71';
-          break;
-        case 'grinding':
-          color = '#f1c40f';
-          break;
-        case 'crashed':
-          color = '#e74c3c';
-          break;
-        default:
-          color = '#3498db';
-      }
-      
       // Simple animation for skating
       let yOffset = 0;
       if (this.state === 'skating' && this.onGround) {
@@ -399,6 +419,9 @@ export default class Player {
       
       // Save context for transformations
       ctx.save();
+      
+      // Determine which player image to use
+      let playerImageKey = this.state;
       
       // Apply rotation for tricks or crash
       if (this.currentTrick !== 'none' || this.state === 'crashed') {
@@ -436,23 +459,55 @@ export default class Player {
         ctx.translate(-centerX, -centerY);
       }
       
-      // Draw player body with offset
-      ctx.fillStyle = color;
-      ctx.fillRect(screenX, this.y + yOffset, this.width, this.height - 10);
-      
-      // Draw head
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(screenX + this.width / 2, this.y + 10 + yOffset, 10, 0, Math.PI * 2);
-      ctx.fill();
+      // Draw player with image if loaded, otherwise fall back to rectangle
+      if (this.imagesLoaded && this.playerImages[playerImageKey]) {
+        // Draw player image
+        ctx.drawImage(
+          this.playerImages[playerImageKey],
+          screenX,
+          this.y + yOffset,
+          this.width,
+          this.height
+        );
+      } else {
+        // Fallback to rectangle if image not loaded
+        // Determine color based on state
+        let color;
+        switch (this.state) {
+          case 'idle':
+            color = '#777';
+            break;
+          case 'skating':
+            color = '#3498db';
+            break;
+          case 'jumping':
+          case 'falling':
+            color = '#2ecc71';
+            break;
+          case 'grinding':
+            color = '#f1c40f';
+            break;
+          case 'crashed':
+            color = '#e74c3c';
+            break;
+          default:
+            color = '#3498db';
+        }
+        
+        // Draw player body with offset
+        ctx.fillStyle = color;
+        ctx.fillRect(screenX, this.y + yOffset, this.width, this.height - 10);
+        
+        // Draw head
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(screenX + this.width / 2, this.y + 10 + yOffset, 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
       
       // Draw skateboard
       if (this.currentTrick !== 'none') {
         // Draw skateboard with trick animation
-        ctx.fillStyle = 'black';
-        
-        // Draw based on trick type and timing
-        const trickProgress = this.trickTimer / 500; // 0 to 1
         const boardWidth = this.width + 10;
         const boardHeight = 5;
         const boardX = screenX - 5;
@@ -464,27 +519,40 @@ export default class Player {
         switch (this.currentTrick) {
           case 'kickflip':
             // Kickflip: rotate board around its long axis
-            ctx.rotate(Math.PI * trickProgress * 1.5);
-            ctx.scale(1, Math.abs(Math.cos(Math.PI * trickProgress * 1.5)));
+            ctx.rotate(Math.PI * (this.trickTimer / 500) * 1.5);
+            ctx.scale(1, Math.abs(Math.cos(Math.PI * (this.trickTimer / 500) * 1.5)));
             break;
           case 'heelflip':
             // Heelflip: opposite rotation
-            ctx.rotate(-Math.PI * trickProgress * 1.5);
-            ctx.scale(1, Math.abs(Math.cos(Math.PI * trickProgress * 1.5)));
+            ctx.rotate(-Math.PI * (this.trickTimer / 500) * 1.5);
+            ctx.scale(1, Math.abs(Math.cos(Math.PI * (this.trickTimer / 500) * 1.5)));
             break;
           case '360flip':
             // 360 flip: combination of flip and rotation
-            ctx.rotate(Math.PI * 2 * trickProgress);
-            ctx.scale(1, Math.abs(Math.cos(Math.PI * trickProgress * 2)));
+            ctx.rotate(Math.PI * 2 * (this.trickTimer / 500));
+            ctx.scale(1, Math.abs(Math.cos(Math.PI * (this.trickTimer / 500) * 2)));
             break;
         }
         
-        ctx.fillRect(-boardWidth / 2, -boardHeight / 2, boardWidth, boardHeight);
-        
-        // Draw skateboard details for better visualization
-        ctx.fillStyle = 'darkgray';
-        ctx.fillRect(-boardWidth / 2 + 5, -boardHeight / 2, 5, boardHeight);
-        ctx.fillRect(boardWidth / 2 - 10, -boardHeight / 2, 5, boardHeight);
+        if (this.imagesLoaded && this.skateboardImage) {
+          // Draw skateboard image
+          ctx.drawImage(
+            this.skateboardImage,
+            -boardWidth / 2,
+            -boardHeight / 2,
+            boardWidth,
+            boardHeight * 2 // Double height for better visibility
+          );
+        } else {
+          // Fallback to rectangle if image not loaded
+          ctx.fillStyle = 'black';
+          ctx.fillRect(-boardWidth / 2, -boardHeight / 2, boardWidth, boardHeight);
+          
+          // Draw skateboard details for better visualization
+          ctx.fillStyle = 'darkgray';
+          ctx.fillRect(-boardWidth / 2 + 5, -boardHeight / 2, 5, boardHeight);
+          ctx.fillRect(boardWidth / 2 - 10, -boardHeight / 2, 5, boardHeight);
+        }
         
         ctx.restore();
         
@@ -495,13 +563,30 @@ export default class Player {
         ctx.fillText(this.currentTrick.toUpperCase(), screenX + this.width / 2, this.y - 15);
       } else {
         // Regular skateboard when not doing tricks
-        ctx.fillStyle = 'black';
-        ctx.fillRect(screenX - 5, this.y + this.height - 5 + yOffset, this.width + 10, 5);
+        const boardWidth = this.width + 10;
+        const boardHeight = 5;
+        const boardX = screenX - 5;
+        const boardY = this.y + this.height - 5 + yOffset;
         
-        // Draw wheels
-        ctx.fillStyle = 'white';
-        ctx.fillRect(screenX - 3, this.y + this.height, 6, 3);
-        ctx.fillRect(screenX + this.width - 3, this.y + this.height, 6, 3);
+        if (this.imagesLoaded && this.skateboardImage) {
+          // Draw skateboard image
+          ctx.drawImage(
+            this.skateboardImage,
+            boardX,
+            boardY,
+            boardWidth,
+            boardHeight * 2 // Double height for better visibility
+          );
+        } else {
+          // Fallback to rectangle if image not loaded
+          ctx.fillStyle = 'black';
+          ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
+          
+          // Draw wheels
+          ctx.fillStyle = 'white';
+          ctx.fillRect(screenX - 3, this.y + this.height, 6, 3);
+          ctx.fillRect(screenX + this.width - 3, this.y + this.height, 6, 3);
+        }
       }
       
       // Reset transformations
@@ -544,6 +629,10 @@ export default class Player {
           ctx.fillStyle = 'yellow';
           ctx.fillText(`Trick: ${this.currentTrick} (${this.trickTimer.toFixed(0)}ms)`, screenX, this.y - 50);
         }
+        
+        // Draw collision bounding box
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+        ctx.strokeRect(screenX, this.y, this.width, this.height);
       }
     } catch (err) {
       console.error('Error in Player.draw:', err);

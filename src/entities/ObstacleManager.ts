@@ -10,6 +10,28 @@ export interface CollisionResult {
   obstacle?: Obstacle;
 }
 
+// Image cache to avoid loading the same images multiple times
+const obstacleImages: {[key: string]: HTMLImageElement} = {};
+
+// Function to load an obstacle image if not already loaded
+function getObstacleImage(type: ObstacleType): HTMLImageElement {
+  if (!obstacleImages[type]) {
+    const img = new Image();
+    img.src = `/images/obstacle-${type}.png`;
+    obstacleImages[type] = img;
+    
+    img.onload = () => {
+      console.log(`Loaded obstacle image: ${type}`);
+    };
+    
+    img.onerror = (err) => {
+      console.error(`Failed to load obstacle image: ${type}`, err);
+    };
+  }
+  
+  return obstacleImages[type];
+}
+
 // Base obstacle class
 export class Obstacle {
   x: number;
@@ -20,6 +42,8 @@ export class Obstacle {
   speed: number = 0;
   hit: boolean = false;
   stackParent: Obstacle | null = null; // Add this property to track if an obstacle is stacked
+  image: HTMLImageElement;
+  imageLoaded: boolean = false;
   
   constructor(x: number, y: number, width: number, height: number, type: ObstacleType) {
     this.x = x;
@@ -27,6 +51,18 @@ export class Obstacle {
     this.width = width;
     this.height = height;
     this.type = type;
+    
+    // Load the image for this obstacle type
+    this.image = getObstacleImage(type);
+    
+    // Check if image is already loaded
+    if (this.image.complete) {
+      this.imageLoaded = true;
+    } else {
+      this.image.onload = () => {
+        this.imageLoaded = true;
+      };
+    }
   }
   
   // Check collision with player
@@ -68,57 +104,84 @@ export class Obstacle {
     try {
       const drawX = this.x - cameraOffset;
       
-      if (this.hit && this.type !== 'box') {
-        ctx.fillStyle = '#444';
+      // Skip drawing if obstacle is off-screen
+      if (drawX + this.width < 0 || drawX > ctx.canvas.width) {
+        return;
+      }
+      
+      // Draw obstacle image if it's loaded
+      if (this.imageLoaded && this.image) {
+        // If hit, draw with reduced opacity
+        if (this.hit) {
+          ctx.globalAlpha = 0.5;
+        }
+        
+        // Draw the image
+        ctx.drawImage(
+          this.image,
+          drawX,
+          this.y,
+          this.width,
+          this.height
+        );
+        
+        // Reset opacity
+        if (this.hit) {
+          ctx.globalAlpha = 1.0;
+        }
       } else {
-        switch (this.type) {
-          case 'box':
-            ctx.fillStyle = '#8B4513'; // Brown
-            break;
-          case 'ramp':
-            ctx.fillStyle = '#228B22'; // Green
-            break;
-          case 'rail':
-            ctx.fillStyle = '#4682B4'; // Steel Blue
-            break;
+        // Fallback to shapes if image is not loaded
+        if (this.hit && this.type !== 'box') {
+          ctx.fillStyle = '#444';
+        } else {
+          switch (this.type) {
+            case 'box':
+              ctx.fillStyle = '#8B4513'; // Brown
+              break;
+            case 'ramp':
+              ctx.fillStyle = '#228B22'; // Green
+              break;
+            case 'rail':
+              ctx.fillStyle = '#4682B4'; // Steel Blue
+              break;
+          }
+        }
+        
+        // Draw different obstacle shapes as fallback
+        if (this.type === 'ramp') {
+          // Draw ramp as a triangle
+          ctx.beginPath();
+          ctx.moveTo(drawX, this.y + this.height);
+          ctx.lineTo(drawX + this.width, this.y);
+          ctx.lineTo(drawX + this.width, this.y + this.height);
+          ctx.closePath();
+          ctx.fillStyle = this.hit ? '#555' : '#32CD32'; // Lime Green
+          ctx.fill();
+        } else if (this.type === 'box') {
+          // Draw box as a rectangle
+          ctx.fillRect(drawX, this.y, this.width, this.height);
+        } else if (this.type === 'rail') {
+          // Draw rail with supports
+          ctx.fillRect(drawX, this.y, this.width, this.height);
+          
+          // Draw supports
+          ctx.fillStyle = '#2C3E50';
+          const supportWidth = 5;
+          const supportSpacing = Math.min(50, this.width / 2);
+          
+          for (let x = supportSpacing/2; x < this.width; x += supportSpacing) {
+            ctx.fillRect(drawX + x - supportWidth/2, this.y + this.height, supportWidth, 20);
+          }
         }
       }
       
       // For debugging hitboxes
       if (window.DEBUG_MODE) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+        ctx.lineWidth = 2;
         ctx.strokeRect(drawX, this.y, this.width, this.height);
-      }
-      
-      // Draw different obstacle shapes
-      if (this.type === 'ramp') {
-        // Draw ramp as a triangle
-        ctx.beginPath();
-        ctx.moveTo(drawX, this.y + this.height);
-        ctx.lineTo(drawX + this.width, this.y);
-        ctx.lineTo(drawX + this.width, this.y + this.height);
-        ctx.closePath();
-        ctx.fillStyle = this.hit ? '#555' : '#32CD32'; // Lime Green
-        ctx.fill();
-      } else if (this.type === 'box') {
-        // Draw box as a rectangle
-        ctx.fillRect(drawX, this.y, this.width, this.height);
-      } else if (this.type === 'rail') {
-        // Draw rail with supports
-        ctx.fillRect(drawX, this.y, this.width, this.height);
         
-        // Draw supports
-        ctx.fillStyle = '#2C3E50';
-        const supportWidth = 5;
-        const supportSpacing = Math.min(50, this.width / 2);
-        
-        for (let x = supportSpacing/2; x < this.width; x += supportSpacing) {
-          ctx.fillRect(drawX + x - supportWidth/2, this.y + this.height, supportWidth, 20);
-        }
-      }
-      
-      // Add label if debug mode
-      if (window.DEBUG_MODE) {
+        // Add label if debug mode
         ctx.fillStyle = 'white';
         ctx.font = '10px Arial';
         ctx.textAlign = 'center';
