@@ -1,0 +1,26 @@
+[
+  {
+    "id": "default_1",
+    "name": "Bitcoin Pro",
+    "score": 1000,
+    "date": "2023-10-22T12:00:00.000Z"
+  },
+  {
+    "id": "default_2",
+    "name": "Skateboard Legend",
+    "score": 750,
+    "date": "2023-10-22T12:00:00.000Z"
+  },
+  {
+    "id": "default_3",
+    "name": "Rookie Skater",
+    "score": 250,
+    "date": "2023-10-22T12:00:00.000Z"
+  },
+  {
+    "id": "device_346288",
+    "score": 6,
+    "name": "Js",
+    "date": "2025-03-14T15:33:16.779Z"
+  }
+]
