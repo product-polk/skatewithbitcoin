@@ -215,6 +215,12 @@ export default class ObstacleManager {
   private stackedObstacleChance: number = 0.3; // 30% chance of stacked obstacles
   private passedObstacles: Set<Obstacle> = new Set(); // Track obstacles that have been passed
   
+  // Track current jump to only award points once per jump
+  private currentJumpId: number = 0;
+  private lastScoringJumpId: number = -1;
+  private playerWasJumping: boolean = false;
+  private pointsAwardedThisJump: boolean = false;
+  
   // New variables for dynamic difficulty
   private totalGameTime: number = 0; // Track total game time
   private speedIncreaseInterval: number = 4000; // Increase speed every 4 seconds (was 5 seconds)
@@ -263,6 +269,27 @@ export default class ObstacleManager {
     try {
       // Update game time
       this.totalGameTime += deltaTime;
+      
+      // Debug: Log the player's score at the start of update
+      const initialScore = player.score;
+      
+      // Track player jump state to detect new jumps
+      const playerIsJumping = player.state === 'jumping' || player.state === 'falling';
+      
+      // If player just started jumping, assign a new jump ID
+      if (playerIsJumping && !this.playerWasJumping) {
+        this.currentJumpId++;
+        this.pointsAwardedThisJump = false;
+        console.log(`New jump detected: Jump #${this.currentJumpId}`);
+      }
+      
+      // Store current jump state for next update
+      this.playerWasJumping = playerIsJumping;
+      
+      // If player is back on ground, reset point tracking for next jump
+      if (player.onGround && this.pointsAwardedThisJump) {
+        this.pointsAwardedThisJump = false;
+      }
       
       // If spawn is active, count time since last obstacle
       if (this.spawnActive) {
@@ -331,6 +358,9 @@ export default class ObstacleManager {
         this.spawnActive = true;
       }
       
+      // Process obstacle updates and check for score events in one pass
+      let scoreResult: CollisionResult | null = null;
+      
       // Update existing obstacles
       for (let i = this.obstacles.length - 1; i >= 0; i--) {
         const obstacle = this.obstacles[i];
@@ -346,23 +376,41 @@ export default class ObstacleManager {
           
           // Check if player has successfully jumped over this obstacle
           const hasPassedObstacle = player.x > obstacle.x + obstacle.width;
-          const isAboveObstacle = player.y + player.height <= obstacle.y;
           
           // Track all obstacles that have been passed
           if (hasPassedObstacle && !this.passedObstacles.has(obstacle)) {
             this.passedObstacles.add(obstacle);
             
             // Only award points for base obstacles (not for stacked parts)
-            if (!obstacle.stackParent) {
+            // AND only if we haven't already awarded points for this jump
+            // AND only if the player is in a jumping or falling state
+            if (!obstacle.stackParent && playerIsJumping && !this.pointsAwardedThisJump) {
               const pointValue = this.getObstaclePointValue(obstacle);
-              console.log(`Awarding ${pointValue} point(s) for passing ${obstacle.type} obstacle`);
-              return { 
+              
+              // IMPORTANT: Set the flag BEFORE updating score to prevent race conditions
+              this.pointsAwardedThisJump = true; 
+              this.lastScoringJumpId = this.currentJumpId;
+              
+              // Store player score before adding points
+              const beforeScore = player.score;
+              
+              // Directly update player's score to ensure correct value
+              player.score += pointValue;
+              
+              console.log(`SCORE EVENT: Jump #${this.currentJumpId} - Score before: ${beforeScore}, after: ${player.score}, points added: ${pointValue}`);
+              
+              scoreResult = { 
                 type: 'score', 
                 points: pointValue,
                 obstacle
               };
-            } else {
+              // Don't return immediately - continue processing other obstacles
+            } else if (obstacle.stackParent) {
               console.log(`Passed stacked ${obstacle.type} obstacle - no points awarded (part of stack)`);
+            } else if (this.pointsAwardedThisJump && playerIsJumping) {
+              console.log(`Already awarded points for Jump #${this.currentJumpId} - no extra points for additional obstacle`);
+            } else if (!playerIsJumping) {
+              console.log(`Player not jumping while passing obstacle - no points awarded`);
             }
           }
         }
@@ -546,9 +594,18 @@ export default class ObstacleManager {
         powerUp.update(deltaTime, player.velocityX);
       });
       
-      // Check collision with player
-      const collisionResult = this.checkCollisions(player);
-      return collisionResult;
+      // Debug: Compare scores to detect any unexpected changes
+      if (player.score !== initialScore) {
+        console.log(`SCORE CHANGED: from ${initialScore} to ${player.score} (diff: ${player.score - initialScore})`);
+      }
+      
+      // Return score result if we have one, otherwise power-up result
+      if (scoreResult) {
+        return scoreResult;
+      }
+      
+      // Explicitly check power-ups but don't add score through this path
+      return this.checkPowerUpCollisionsWithoutScoring(player);
     } catch (err) {
       console.error('Error in ObstacleManager.update:', err);
       return { type: 'none' };
@@ -935,30 +992,30 @@ export default class ObstacleManager {
     try {
       this.obstacles = [];
       this.powerUps = [];
-      this.lastObstacleTime = 0;
-      this.totalDistance = 0;
-      this.spawnActive = false; // Start with spawning disabled until after initial delay
-      this.timeSinceLastObstacle = 0;
-      this.timeSinceLastPowerUp = 0;
+      this.obstacleTypes = { 'box': 0, 'ramp': 0, 'rail': 0 };
+      this.passedObstacles.clear();
       this.totalGameTime = 0;
       this.lastSpeedIncreaseTime = 0;
-      this.gameSpeed = 200 + this.initialSpeedBoost;
-      this.passedObstacles.clear();
-      this.lastObstacleWasRapid = false;
-      this.lastObstacleDifficulty = 0;
+      this.timeSinceLastObstacle = 0;
+      this.timeSinceLastPowerUp = 0;
+      this.spawnActive = false;
+      this.gameSpeed = 200; // Reset game speed
+      this.lastObstacleType = null;
       this.obstaclePatterns = 0;
-      
-      // Reset power-up counters
-      this.guaranteedPowerUpTimer = 0;
-      this.powerUpsInLastMinute = 0;
-      this.lastMinuteResetTime = 0;
-      this.earlyPowerUpCount = 0;
-      
-      // Reset obstacle tracking
+      this.totalDistance = 0;
       this.firstObstacleSpawned = false;
       this.obstacleCountInEasyMode = 0;
+      this.powerUpsInLastMinute = 0;
+      this.guaranteedPowerUpTimer = 0;
+      this.lastMinuteResetTime = 0;
       
-      console.log('ObstacleManager reset');
+      // Reset jump tracking
+      this.currentJumpId = 0;
+      this.lastScoringJumpId = -1;
+      this.playerWasJumping = false;
+      this.pointsAwardedThisJump = false;
+      
+      console.log('Obstacle manager reset');
     } catch (err) {
       console.error('Error in ObstacleManager.reset:', err);
     }
@@ -1043,7 +1100,44 @@ export default class ObstacleManager {
     }
   }
   
-  // Check collisions with both obstacles and power-ups
+  // Version that doesn't award score for power-ups to avoid double scoring
+  checkPowerUpCollisionsWithoutScoring(player: Player): CollisionResult {
+    try {
+      // Only check for power-up collisions if player is in the air (jumping)
+      if ((player.state === 'jumping' || player.state === 'falling') && !player.crashed) {
+        for (const powerUp of this.powerUps) {
+          if (powerUp.checkCollision(player)) {
+            // Only collect if player doesn't already have a power-up
+            if (player.currentPowerUp === 'none') {
+              console.log(`Player collected power-up: ${powerUp.type}`);
+              powerUp.collect();
+              player.collectPowerUp(powerUp.type);
+              // Return type 'none' to avoid adding score here
+              return { type: 'none' };
+            } else {
+              console.log('Player already has a power-up, cannot collect another');
+              return { type: 'none' };
+            }
+          }
+        }
+      }
+      
+      // No collisions
+      return { type: 'none' };
+    } catch (err) {
+      console.error('Error in ObstacleManager.checkPowerUpCollisionsWithoutScoring:', err);
+      return { type: 'none' };
+    }
+  }
+
+  // Update the checkPowerUpCollisions method to be consistent
+  checkPowerUpCollisions(player: Player): CollisionResult {
+    // Just delegate to the new method to ensure consistent behavior
+    return this.checkPowerUpCollisionsWithoutScoring(player);
+  }
+
+  // Maintain the original method signature for compatibility
+  // This only checks for crash collisions now, not scoring
   checkCollisions(player: Player): CollisionResult {
     try {
       // First check for obstacle collisions
@@ -1059,48 +1153,14 @@ export default class ObstacleManager {
           
           if (result.type === 'crash') {
             console.log('Player crashed into obstacle');
-          } else if (result.type === 'score') {
-            console.log(`Player scored ${result.points} points from obstacle`);
+            return result;
           }
-          
-          return result;
-        }
-        
-        // Track obstacles the player has passed
-        if (!this.passedObstacles.has(obstacle) && player.x > obstacle.x + obstacle.width) {
-          this.passedObstacles.add(obstacle);
-          
-          // Add score for passing obstacles
-          const points = this.getObstaclePointValue(obstacle);
-          if (points > 0) {
-            player.score += points;
-            console.log(`Player earned ${points} points for passing obstacle`);
-            return { type: 'score', points };
-          }
+          // No longer returning score results from here
         }
       }
       
-      // Then check for power-up collisions if player is in the air (jumping)
-      if ((player.state === 'jumping' || player.state === 'falling') && !player.crashed) {
-        for (const powerUp of this.powerUps) {
-          if (powerUp.checkCollision(player)) {
-            // Only collect if player doesn't already have a power-up
-            if (player.currentPowerUp === 'none') {
-              console.log(`Player collected power-up: ${powerUp.type}`);
-              powerUp.collect();
-              player.collectPowerUp(powerUp.type);
-              return { type: 'score', points: 2 }; // Small score bonus for collecting
-            } else {
-              console.log('Player already has a power-up, cannot collect another');
-              // Don't collect - just pass through
-              return { type: 'none' };
-            }
-          }
-        }
-      }
-      
-      // No collisions
-      return { type: 'none' };
+      // Check for power-up collisions without adding score
+      return this.checkPowerUpCollisionsWithoutScoring(player);
     } catch (err) {
       console.error('Error in ObstacleManager.checkCollisions:', err);
       return { type: 'none' };

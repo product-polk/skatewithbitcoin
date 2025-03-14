@@ -11,6 +11,72 @@ export interface PowerUpConfig {
   type: TrickType;
 }
 
+// Create a cache for power-up images to avoid loading the same image multiple times
+const powerUpImageCache: {[key: string]: HTMLImageElement | null} = {};
+
+// Create a fallback canvas-based image for power-ups
+const createFallbackPowerUpImage = (type: TrickType): HTMLImageElement => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  // Set canvas size to match power-up dimensions
+  canvas.width = 44;
+  canvas.height = 44;
+  
+  if (ctx) {
+    // Get color based on trick type
+    let color = '#4dabf7'; // Default blue
+    
+    switch (type) {
+      case 'kickflip':
+        color = '#4dabf7'; // Blue
+        break;
+      case '360flip':
+        color = '#da77f2'; // Purple
+        break;
+      case 'heelflip':
+        color = '#69db7c'; // Green
+        break;
+    }
+    
+    // Draw a circular background
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(canvas.width/2, canvas.height/2, canvas.width/2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw an inner colored circle
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(canvas.width/2, canvas.height/2, canvas.width/2 - 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw text label
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    let label = 'K';
+    if (type === '360flip') label = '3';
+    if (type === 'heelflip') label = 'H';
+    
+    ctx.fillText(label, canvas.width/2, canvas.height/2);
+    
+    // Add a glowing effect
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(canvas.width/2, canvas.height/2, canvas.width/2 - 2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  
+  // Convert canvas to image
+  const img = new Image();
+  img.src = canvas.toDataURL();
+  return img;
+};
+
 export default class PowerUp {
   // Position
   public x: number;
@@ -50,27 +116,35 @@ export default class PowerUp {
    * Load power-up image
    */
   private loadImage(): void {
-    this.image = new Image();
-    this.image.src = `/images/powerup-${this.type}.png`;
+    // Check if this image is already in the cache
+    const cacheKey = `powerup-${this.type}`;
     
-    this.image.onload = () => {
-      console.log(`Loaded power-up image: ${this.type}`);
+    if (powerUpImageCache[cacheKey]) {
+      // Use cached image
+      this.image = powerUpImageCache[cacheKey];
       this.imageLoaded = true;
+      return;
+    }
+    
+    // If not in cache, try to load it
+    const img = new Image();
+    img.src = `/images/powerup-${this.type}.png`;
+    
+    img.onload = () => {
+      console.log(`Loaded power-up image: ${this.type}`);
+      this.image = img;
+      this.imageLoaded = true;
+      powerUpImageCache[cacheKey] = img; // Add to cache
     };
     
-    this.image.onerror = (err) => {
+    img.onerror = (err) => {
       console.error(`Failed to load power-up image: ${this.type}`, err);
-      // Don't wait for images - set to null so we use the fallback rendering
-      this.image = null;
+      // Create fallback image
+      const fallbackImg = createFallbackPowerUpImage(this.type);
+      this.image = fallbackImg;
+      this.imageLoaded = true;
+      powerUpImageCache[cacheKey] = fallbackImg; // Add to cache
     };
-    
-    // Set a timeout to fallback to default rendering if image takes too long
-    setTimeout(() => {
-      if (!this.imageLoaded) {
-        console.log(`Timeout loading power-up image: ${this.type}, using fallback rendering`);
-        this.image = null;
-      }
-    }, 1000);
   }
   
   /**
@@ -148,49 +222,45 @@ export default class PowerUp {
    */
   public draw(ctx: CanvasRenderingContext2D, cameraOffset: number = 0): void {
     try {
-      // Don't draw anything if not active
-      if (!this.active) return;
-      
-      // Only draw the power-up visuals if not collected
-      // But still draw collection effects if we're collecting
-      
-      // Calculate screen position with camera offset
-      const screenX = this.x - cameraOffset;
-      
-      // Floating animation - smoother movement
-      const floatOffset = Math.sin(this.frameCount * 0.05) * 6;
-      
-      // Collection effects (particles)
-      if (this.isCollecting) {
-        // Draw collection particles
-        for (const effect of this.collectionEffects) {
-          ctx.save();
-          ctx.globalAlpha = effect.alpha;
-          ctx.fillStyle = effect.color;
-          ctx.beginPath();
-          ctx.arc(screenX + effect.x, this.y + floatOffset + effect.y, effect.size, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
+      // If not active or already collected, don't draw
+      if (!this.active) {
+        return;
       }
       
-      // Skip drawing the main power-up if collected
-      if (this.collected) return;
+      const screenX = this.x - cameraOffset;
       
-      // More subtle pulsing/rotating effect
-      const pulseScale = 1 + Math.sin(this.frameCount * 0.03) * 0.08; // More subtle pulsing
-      const rotation = this.frameCount * 0.01; // Slower rotation
+      // Skip drawing if off-screen (optimization)
+      if (screenX + this.width < 0 || screenX > ctx.canvas.width) {
+        return;
+      }
       
-      // Save context for transformations
+      this.frameCount++;
+      
+      // Draw the collection effects if being collected
+      if (this.isCollecting) {
+        this.drawCollectionEffects(ctx, screenX);
+        return;
+      }
+      
+      // Save context state
       ctx.save();
       
-      // Apply rotation and pulsing
-      ctx.translate(screenX + this.width / 2, this.y + this.height / 2 + floatOffset);
-      ctx.rotate(rotation);
-      ctx.scale(pulseScale, pulseScale);
-      
+      // Check if image is loaded, use it or draw a fallback
       if (this.imageLoaded && this.image) {
-        // Draw power-up image
+        // Add floating animation
+        const floatOffset = Math.sin(this.frameCount * 0.1) * 5;
+        
+        // Add pulsing scale
+        const scale = 1 + Math.sin(this.frameCount * 0.1) * 0.1;
+        
+        // Set up transformation for animation
+        ctx.translate(screenX + this.width / 2, this.y + this.height / 2 + floatOffset);
+        ctx.scale(scale, scale);
+        
+        // Draw with a slight rotation
+        ctx.rotate(Math.sin(this.frameCount * 0.05) * 0.1);
+        
+        // Draw the image
         ctx.drawImage(
           this.image,
           -this.width / 2,
@@ -198,54 +268,36 @@ export default class PowerUp {
           this.width,
           this.height
         );
+        
+        // Draw sparkles
+        this.drawSparkles(ctx, 0, 0);
+        
       } else {
-        // Clean, modern power-up design
+        // Fallback: Draw directly without waiting for image to load
+        const fallbackImage = createFallbackPowerUpImage(this.type);
         
-        // Outer glow (subtle)
-        ctx.shadowColor = this.getTrickColor();
-        ctx.shadowBlur = 10;
+        // Add floating animation
+        const floatOffset = Math.sin(this.frameCount * 0.1) * 5;
         
-        // Main circle - semi-transparent for a cleaner look
-        ctx.fillStyle = 'rgba(15,20,25,0.9)'; // Dark background
-        ctx.beginPath();
-        ctx.arc(0, 0, this.width / 2, 0, Math.PI * 2);
-        ctx.fill();
+        // Draw the fallback image
+        ctx.translate(screenX + this.width / 2, this.y + this.height / 2 + floatOffset);
+        ctx.drawImage(
+          fallbackImage,
+          -this.width / 2,
+          -this.height / 2,
+          this.width,
+          this.height
+        );
         
-        // Inner colored circle - smaller for a modern look
-        ctx.fillStyle = this.getTrickColor();
-        ctx.beginPath();
-        ctx.arc(0, 0, this.width / 2 - 8, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Subtle shimmer effect - thin arc
-        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(0, 0, this.width / 2 - 4, -Math.PI/4, Math.PI/2);
-        ctx.stroke();
-        
-        // Trick letter - clean, centered typography
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 18px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        
-        let label = 'K';
-        if (this.type === '360flip') label = '3';
-        if (this.type === 'heelflip') label = 'H';
-        
-        ctx.fillText(label, 0, 0);
+        // Draw sparkles
+        this.drawSparkles(ctx, 0, 0);
       }
       
-      // Restore context
+      // Restore context state
       ctx.restore();
       
-      // Add minimal, elegant sparkle effects if not collected
-      if (!this.collected) {
-        this.drawSparkles(ctx, screenX, this.y + floatOffset);
-      }
     } catch (err) {
-      console.error('Error in PowerUp.draw:', err);
+      console.error('Error drawing power-up:', err);
     }
   }
   
@@ -326,5 +378,28 @@ export default class PowerUp {
     }
     
     console.log(`PowerUp collected: ${this.type}`);
+  }
+  
+  /**
+   * Draw collection effects (particles)
+   */
+  private drawCollectionEffects(ctx: CanvasRenderingContext2D, screenX: number): void {
+    try {
+      // Floating animation
+      const floatOffset = Math.sin(this.frameCount * 0.05) * 6;
+      
+      // Draw collection particles
+      for (const effect of this.collectionEffects) {
+        ctx.save();
+        ctx.globalAlpha = effect.alpha;
+        ctx.fillStyle = effect.color;
+        ctx.beginPath();
+        ctx.arc(screenX + effect.x, this.y + floatOffset + effect.y, effect.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    } catch (err) {
+      console.error('Error drawing collection effects:', err);
+    }
   }
 } 

@@ -41,6 +41,7 @@ export default class Player {
   public currentTrick: TrickType = 'none';
   public trickTimer: number = 0;
   public crashed: boolean = false;
+  public trickCompleted: boolean = false; // Track if current trick has awarded points
   
   // Power-up state
   public currentPowerUp: TrickType = 'none';  // Currently collected power-up
@@ -141,20 +142,6 @@ export default class Player {
         this.powerUpMessageTimer -= deltaTime;
       }
       
-      // Handle pending power-up activation
-      if (this.pendingPowerUp) {
-        this.powerUpDelay -= deltaTime;
-        if (this.powerUpDelay <= 0) {
-          this.pendingPowerUp = false;
-          this.powerUpDelay = 50; // Reset for next time
-          
-          // Apply the power-up if we still have one and aren't already doing a trick
-          if (this.currentPowerUp !== 'none' && this.currentTrick === 'none') {
-            this.usePowerUp();
-          }
-        }
-      }
-      
       // Always move forward when skating
       if (this.state === 'skating') {
         this.velocityX = this.speed;
@@ -192,7 +179,12 @@ export default class Player {
       if (this.currentTrick !== 'none') {
         this.trickTimer += deltaTime;
         
-        // Complete trick after 500ms
+        // Award points after just 250ms, even if animation continues
+        if (this.trickTimer >= 250 && !this.trickCompleted) {
+          this.awardTrickPoints();
+        }
+        
+        // Complete trick animation after full 500ms
         if (this.trickTimer >= 500) {
           this.completeTrick();
         }
@@ -249,22 +241,31 @@ export default class Player {
         }
       }
       
-      // Check if any key is pressed EXCEPT jump/spacebar
+      // Check if any key OTHER THAN jump/spacebar was pressed
       const anyKeyPressed = inputManager.hasAnyKeyJustPressed();
       const jumpPressed = inputManager.wasJustPressed('jump');
+      const nonJumpKeyPressed = anyKeyPressed && !jumpPressed;
       
-      // Only consider non-jump key presses when we have a power-up and no active trick
-      if (anyKeyPressed && !jumpPressed && this.currentPowerUp !== 'none' && this.currentTrick === 'none') {
+      // Handle powerup activation - ANY key except spacebar triggers jump + trick when on ground
+      if (nonJumpKeyPressed && this.currentPowerUp !== 'none' && this.currentTrick === 'none') {
         if (this.onGround || this.onRail) {
-          // If on ground, jump and queue power-up in one action
+          // IMPORTANT: First do the trick while still on ground
+          const savedPowerUp = this.currentPowerUp;  // Save the power-up type
+          this.currentPowerUp = 'none';  // Clear power-up before jumping
+          
+          // Start the trick using the collected power-up
+          this.startTrick(savedPowerUp);
+          
+          // THEN jump (trick will continue during jump)
           this.jump();
           
-          // Schedule the trick to happen shortly after the jump
-          this.pendingPowerUp = true;
-          this.powerUpDelay = 50; // 50ms delay
+          console.log("Performing trick and jumping");
+          this.powerUpIndicatorAlpha = 0;
         } else {
-          // If already in the air, just use the power-up immediately
-          this.usePowerUp();
+          // If already in the air, show a message that you can't use power-ups mid-air
+          console.log('Cannot perform trick while already in air - must start from ground');
+          // Show a quick message to the player
+          this.powerUpMessageTimer = Math.max(this.powerUpMessageTimer, 1000);
         }
       }
     } catch (err) {
@@ -284,9 +285,9 @@ export default class Player {
       this.state = 'jumping';
       this.jumpCooldown = 250; // Prevent double-tapping jump too quickly
       
-      // Reset trick state
-      this.currentTrick = 'none';
-      this.trickTimer = 0;
+      // DON'T reset trick state because we want to continue any ongoing trick during the jump
+      // this.currentTrick = 'none';
+      // this.trickTimer = 0;
       
       console.log('Player jumped');
     } catch (err) {
@@ -320,11 +321,17 @@ export default class Player {
     try {
       this.currentTrick = trick;
       this.trickTimer = 0;
+      this.trickCompleted = false;
       
-      // Small upward boost when starting a trick
+      // Always add a small upward boost for better trick visibility
+      // If already moving upward, just enhance slightly
       if (this.velocityY > 0) {
-        // If falling, give a small upward boost
-        this.velocityY -= 100;
+        // Bigger boost during falling to make trick more visible
+        this.velocityY = -this.jumpForce * 0.5;
+        console.log(`Added stronger boost for trick while falling: ${trick}`);
+      } else {
+        // Small enhancement to upward velocity for tricks during ascent
+        this.velocityY *= 1.1; // 10% boost to current upward momentum
       }
       
       console.log(`Starting trick: ${trick}`);
@@ -334,21 +341,41 @@ export default class Player {
   }
   
   /**
-   * Complete a trick and award points
+   * Award points for a trick (called early to ensure points are given)
    */
-  private completeTrick(): void {
+  private awardTrickPoints(): void {
     try {
-      // All tricks give a fixed number of points with no combo multiplier
+      // All tricks give a fixed number of points
       const points = 5;
       
       if (this.currentTrick !== 'none') {
-        // Add points directly to score without combo multiplier
+        // Add points directly to score
+        this.score += points;
+        this.trickCompleted = true;
+        console.log(`Early trick points awarded: ${points} for ${this.currentTrick}`);
+      }
+    } catch (err) {
+      console.error('Error in Player.awardTrickPoints:', err);
+    }
+  }
+  
+  /**
+   * Complete a trick animation after awarding points
+   */
+  private completeTrick(): void {
+    try {
+      // Award points if not already awarded
+      if (this.currentTrick !== 'none' && !this.trickCompleted) {
+        const points = 5;
         this.score += points;
         console.log(`Completed ${this.currentTrick} for ${points} points`);
+      } else if (this.currentTrick !== 'none') {
+        console.log(`Completed ${this.currentTrick} animation (points already awarded)`);
       }
       
       this.currentTrick = 'none';
       this.trickTimer = 0;
+      this.trickCompleted = false;
     } catch (err) {
       console.error('Error in Player.completeTrick:', err);
     }
@@ -362,9 +389,19 @@ export default class Player {
       this.state = 'skating';
       this.onGround = true;
       
-      // If we didn't complete the trick in the air, just reset the trick
+      // If there's an ongoing trick when landing, ensure points are awarded
       if (this.currentTrick !== 'none') {
-        console.log('Failed to complete trick before landing');
+        // Award points if not already awarded and trick has been going for at least 100ms
+        if (!this.trickCompleted && this.trickTimer >= 100) {
+          this.awardTrickPoints();
+          console.log('Awarded points for trick interrupted by landing');
+        } else if (this.trickCompleted) {
+          console.log('Trick interrupted by landing, but points were already awarded');
+        } else {
+          console.log('Trick was too quick - no points awarded');
+        }
+        
+        // Reset trick state
         this.currentTrick = 'none';
         this.trickTimer = 0;
       }
@@ -436,7 +473,8 @@ export default class Player {
    */
   public usePowerUp(): void {
     try {
-      if (this.currentPowerUp !== 'none' && this.currentTrick === 'none') {
+      // Only use power-up if we have one, aren't already doing a trick, and are on ground
+      if (this.currentPowerUp !== 'none' && this.currentTrick === 'none' && (this.onGround || this.onRail)) {
         // Start the trick using the collected power-up
         this.startTrick(this.currentPowerUp);
         
@@ -445,6 +483,8 @@ export default class Player {
         this.powerUpIndicatorAlpha = 0;
         
         console.log('Used power-up to perform trick');
+      } else if (this.currentPowerUp !== 'none' && !this.onGround && !this.onRail) {
+        console.log('Cannot use power-up in mid-air');
       }
     } catch (err) {
       console.error('Error in Player.usePowerUp:', err);
@@ -475,11 +515,11 @@ export default class Player {
       this.currentPowerUp = 'none';
       this.powerUpIndicatorAlpha = 0;
       this.powerUpMessageTimer = 0;
-      this.pendingPowerUp = false;
-      this.powerUpDelay = 50;
       
       // Set a default speed when game starts
       this.velocityX = this.speed * 0.5;
+      
+      this.trickCompleted = false;
       
       console.log("Player reset to:", x, y);
     } catch (err) {
@@ -916,9 +956,15 @@ export default class Player {
         ctx.textBaseline = 'middle';
         
         if (this.currentPowerUp !== 'none') {
-          ctx.fillText(`${this.currentPowerUp.toUpperCase()} COLLECTED`, width / 2, notifY + 16);
-          ctx.font = '14px Arial';
-          ctx.fillText('Press any key (except SPACE) to use', width / 2, notifY + 36);
+          if (!this.onGround && !this.onRail) {
+            ctx.fillText(`LAND FIRST TO USE POWER-UP`, width / 2, notifY + 16);
+            ctx.font = '14px Arial';
+            ctx.fillText('Must be on ground to start tricks', width / 2, notifY + 36);
+          } else {
+            ctx.fillText(`${this.currentPowerUp.toUpperCase()} COLLECTED`, width / 2, notifY + 16);
+            ctx.font = '14px Arial';
+            ctx.fillText('Press any key (except SPACE) to jump & trick', width / 2, notifY + 36);
+          }
         }
         
         ctx.restore();

@@ -36,6 +36,7 @@ const HighScores: React.FC<HighScoresProps> = ({
   const [playerRank, setPlayerRank] = useState<number | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [showNameInput, setShowNameInput] = useState<boolean>(false);
+  const [autoSubmitted, setAutoSubmitted] = useState<boolean>(false);
 
   // Generate a device ID based on browser information
   useEffect(() => {
@@ -48,6 +49,12 @@ const HighScores: React.FC<HighScoresProps> = ({
       localStorage.setItem('skatewithbitcoinDeviceId', newDeviceId);
       setDeviceId(newDeviceId);
     }
+    
+    // Load saved player name if available
+    const savedPlayerName = localStorage.getItem('skatewithbitcoinPlayerName');
+    if (savedPlayerName) {
+      setPlayerName(savedPlayerName);
+    }
   }, []);
 
   // Fetch global high scores when the modal opens
@@ -58,13 +65,116 @@ const HighScores: React.FC<HighScoresProps> = ({
     }
   }, [isOpen]);
 
-  // Determine if current score is worthy of submitting
+  // Auto-submit high score if we have a saved name
   useEffect(() => {
+    console.log('Auto-submit effect triggered with:', { 
+      isOpen, 
+      currentScore, 
+      playerName, 
+      autoSubmitted 
+    });
+    
+    // Only auto-submit if we have a saved name from before
     if (isOpen && currentScore > 0) {
-      // Simplified logic - just show input if score > 0
+      const savedPlayerName = localStorage.getItem('skatewithbitcoinPlayerName');
+      
+      if (savedPlayerName && playerName && !autoSubmitted) {
+        // We have a SAVED name from before and haven't submitted yet - auto-submit
+        console.log('Auto-submitting high score with saved name:', playerName);
+        // Add a small delay to ensure component is fully mounted
+        setTimeout(() => {
+          submitScore();
+          setAutoSubmitted(true);
+        }, 700);
+      } else if (!savedPlayerName) {
+        // No saved name, make sure the input form is shown but DON'T auto-submit
+        console.log('No saved player name found, showing input form for manual entry');
+        setShowNameInput(true);
+      }
+    }
+  }, [isOpen, currentScore, playerName, autoSubmitted]);
+
+  // Always force showing the input form if we have a score but no player name
+  useEffect(() => {
+    if (isOpen && currentScore > 0 && !playerName) {
+      console.log('Force showing name input because no saved name exists');
       setShowNameInput(true);
     }
-  }, [isOpen, currentScore]);
+  }, [isOpen, currentScore, playerName]);
+
+  // Make sure to show the form when it's opened and we don't have a player name yet
+  useEffect(() => {
+    if (isOpen) {
+      console.log('Modal opened with currentScore:', currentScore);
+      if (currentScore > 0 && !playerName) {
+        console.log('Showing name input form on modal open');
+        setShowNameInput(true);
+      }
+    }
+  }, [isOpen]);
+
+  // When the component mounts, check localStorage values to help with debugging
+  useEffect(() => {
+    // Log all localStorage items related to the game
+    console.log('Current localStorage state:');
+    console.log('- High Score:', localStorage.getItem('skatewithbitcoinHighScore'));
+    console.log('- Player Name:', localStorage.getItem('skatewithbitcoinPlayerName'));
+    console.log('- Device ID:', localStorage.getItem('skatewithbitcoinDeviceId'));
+    console.log('- Auto Submitted:', localStorage.getItem('skatewithbitcoinAutoSubmitted'));
+    
+    // Component state
+    console.log('Component state on mount:');
+    console.log('- isOpen:', isOpen);
+    console.log('- currentScore:', currentScore);
+    console.log('- playerHighScore:', playerHighScore);
+    console.log('- playerName state:', playerName);
+  }, []);
+  
+  // Reset the autoSubmitted flag whenever the modal is closed
+  useEffect(() => {
+    if (!isOpen) {
+      console.log('Modal closed, resetting autoSubmitted state for next time');
+      setAutoSubmitted(false);
+      
+      // Clean up local storage flag to ensure future submissions work
+      try {
+        localStorage.removeItem('skatewithbitcoinAutoSubmitted');
+      } catch (e) {
+        console.error('Error removing autoSubmitted flag:', e);
+      }
+    }
+  }, [isOpen]);
+
+  // Add an effect to handle keyboard event capture when the modal is open
+  useEffect(() => {
+    if (isOpen) {
+      // Function to prevent keyboard events from reaching the game
+      const preventKeyboardEvents = (e: KeyboardEvent) => {
+        // Only prevent events when the modal is open
+        if (isOpen) {
+          // Stop all keyboard events from bubbling up
+          e.stopPropagation();
+          
+          // Prevent default actions for game control keys
+          if (e.code === 'Space' || e.code === 'ArrowUp' || 
+              e.code === 'ArrowDown' || e.code === 'ArrowLeft' || 
+              e.code === 'ArrowRight') {
+            e.preventDefault();
+          }
+          
+          console.log('Blocked keyboard event in high scores modal:', e.code);
+        }
+      };
+      
+      // Add event listener with capture phase to catch events before they reach other handlers
+      document.addEventListener('keydown', preventKeyboardEvents, true);
+      
+      // Clean up
+      return () => {
+        document.removeEventListener('keydown', preventKeyboardEvents, true);
+      };
+    }
+  }, [isOpen]);
 
   const fetchHighScores = async () => {
     console.log('Attempting to fetch high scores from API');
@@ -96,22 +206,24 @@ const HighScores: React.FC<HighScoresProps> = ({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const submitScore = async () => {
     if (!playerName.trim()) {
+      console.log('Player name is empty, cannot submit score');
       return;
     }
     
     try {
       setSubmitting(true);
+      console.log('Starting score submission process with name:', playerName, 'score:', currentScore);
+      
+      // Save player name to localStorage immediately so it's available even if API submission fails
+      localStorage.setItem('skatewithbitcoinPlayerName', playerName);
+      console.log('Player name saved to localStorage:', playerName);
       
       // Generate timestamp for score verification
       const timestamp = Date.now().toString();
       
       // Create a simple client-side hash for score verification
-      // This is a simplified version - in a real app, you would use a more secure method
-      // and match the hash generation used on the server
       const scoreHash = await generateScoreHash(currentScore, deviceId || 'unknown', timestamp);
       
       console.log('Submitting high score:', { 
@@ -122,41 +234,47 @@ const HighScores: React.FC<HighScoresProps> = ({
         scoreHash
       });
       
-      const response = await fetch('/api/highscores', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          score: currentScore,
-          name: playerName,
-          deviceId,
-          timestamp,
-          scoreHash
-        }),
-      });
-      
-      console.log('Score submission response status:', response.status);
-      
-      if (!response.ok) {
-        throw new Error('Failed to submit high score');
-      }
-      
-      const data = await response.json();
-      console.log('Score submission response data:', data);
-      
-      // Update global scores with the response
-      if (data.topScores) {
-        setGlobalScores(data.topScores);
-      }
-      if (data.rank) {
-        setPlayerRank(data.rank);
-      }
-      setShowNameInput(false);
-      
-      // Call the onSubmit callback if provided
-      if (onSubmit) {
-        onSubmit(playerName);
+      try {
+        const response = await fetch('/api/highscores', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            score: currentScore,
+            name: playerName,
+            deviceId,
+            timestamp,
+            scoreHash
+          }),
+        });
+        
+        console.log('Score submission response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error('Failed to submit high score');
+        }
+        
+        const data = await response.json();
+        console.log('Score submission response data:', data);
+        
+        // Update global scores with the response
+        if (data.topScores) {
+          setGlobalScores(data.topScores);
+        }
+        if (data.rank) {
+          setPlayerRank(data.rank);
+        }
+        setShowNameInput(false);
+        
+        // Call the onSubmit callback if provided
+        if (onSubmit) {
+          console.log('Calling onSubmit callback with name:', playerName);
+          onSubmit(playerName);
+        }
+      } catch (fetchError) {
+        console.error('Fetch error during score submission:', fetchError);
+        throw fetchError;
       }
       
     } catch (err) {
@@ -165,6 +283,18 @@ const HighScores: React.FC<HighScoresProps> = ({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log('Form submitted with player name:', playerName);
+    
+    if (!playerName.trim()) {
+      console.log('Empty player name, not submitting');
+      return;
+    }
+    
+    submitScore();
   };
 
   // Helper function to generate a hash for score verification
@@ -213,6 +343,16 @@ const HighScores: React.FC<HighScoresProps> = ({
             justifyContent: 'center',
             zIndex: 100000,
             animation: 'fadeIn 0.3s ease-out'
+          }}
+          // Add event handlers to prevent keyboard events from reaching the game
+          onKeyDown={(e) => {
+            e.stopPropagation();
+          }}
+          onKeyUp={(e) => {
+            e.stopPropagation();
+          }}
+          onKeyPress={(e) => {
+            e.stopPropagation();
           }}
         >
           <div 
@@ -336,83 +476,117 @@ const HighScores: React.FC<HighScoresProps> = ({
               )}
             </div>
             
-            {showNameInput && (
-              <form onSubmit={handleSubmit} style={{ marginBottom: '28px' }}>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ 
-                    color: 'white', 
-                    display: 'block', 
-                    marginBottom: '12px', 
-                    fontWeight: 'bold',
-                    fontSize: '16px' 
-                  }}>
-                    Submit your score to the global leaderboard:
-                  </label>
-                  <input
-                    type="text"
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    placeholder="Your name"
-                    required
-                    maxLength={20}
+            {/* Make name input form more prominent and always visible when needed */}
+            {(showNameInput || (currentScore > 0 && !playerName)) && (
+              <div style={{ 
+                marginBottom: '28px',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                borderRadius: '12px',
+                padding: '20px',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                animation: 'pulse 1.5s infinite ease-in-out'
+              }}>
+                <form onSubmit={handleSubmit}>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ 
+                      color: 'white', 
+                      display: 'block', 
+                      marginBottom: '12px', 
+                      fontWeight: 'bold',
+                      fontSize: '16px' 
+                    }}>
+                      {currentScore > playerHighScore 
+                        ? 'New high score! Enter your name:' 
+                        : 'Enter your name to join the leaderboard:'}
+                    </label>
+                    <input
+                      type="text"
+                      value={playerName}
+                      onChange={(e) => {
+                        console.log('Name input changed:', e.target.value);
+                        setPlayerName(e.target.value);
+                      }}
+                      onClick={(e) => {
+                        // Prevent event bubbling
+                        e.stopPropagation();
+                      }}
+                      placeholder="Your name"
+                      required
+                      maxLength={20}
+                      // Key event handler to prevent auto-submission
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          // Let the form handle the submission
+                          return;
+                        }
+                        // Log other key presses to debug
+                        console.log('Key pressed in name input:', e.key);
+                        // Prevent event bubbling
+                        e.stopPropagation();
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        color: '#1e293b',
+                        border: '2px solid #3b82f6',
+                        borderRadius: '8px',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        boxSizing: 'border-box',
+                        outline: 'none',
+                        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)'
+                      }}
+                      onFocus={(e) => {
+                        console.log('Input field focused');
+                        e.currentTarget.style.backgroundColor = 'white';
+                        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3), 0 2px 10px rgba(0, 0, 0, 0.1)';
+                        // Prevent event bubbling
+                        e.stopPropagation();
+                      }}
+                      onBlur={(e) => {
+                        console.log('Input field blurred');
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                        e.currentTarget.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={submitting}
                     style={{
                       width: '100%',
-                      padding: '12px 16px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                      color: '#1e293b',
-                      border: '2px solid #3b82f6',
+                      padding: '14px',
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
                       borderRadius: '8px',
                       fontSize: '16px',
-                      fontWeight: '500',
-                      boxSizing: 'border-box',
-                      outline: 'none',
-                      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)'
+                      fontWeight: 'bold',
+                      cursor: submitting ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                      opacity: submitting ? '0.7' : '1'
                     }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.backgroundColor = 'white';
-                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3), 0 2px 10px rgba(0, 0, 0, 0.1)';
+                    onMouseOver={(e) => {
+                      if (!submitting) {
+                        e.currentTarget.style.backgroundColor = '#2563eb';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 6px 10px rgba(0, 0, 0, 0.15)';
+                      }
                     }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
-                      e.currentTarget.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
+                    onMouseOut={(e) => {
+                      if (!submitting) {
+                        e.currentTarget.style.backgroundColor = '#3b82f6';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+                      }
                     }}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  style={{
-                    width: '100%',
-                    padding: '14px',
-                    backgroundColor: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    fontWeight: 'bold',
-                    cursor: submitting ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s ease',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    opacity: submitting ? '0.7' : '1'
-                  }}
-                  onMouseOver={(e) => {
-                    if (!submitting) {
-                      e.currentTarget.style.backgroundColor = '#2563eb';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 6px 10px rgba(0, 0, 0, 0.15)';
-                    }
-                  }}
-                  onMouseOut={(e) => {
-                    if (!submitting) {
-                      e.currentTarget.style.backgroundColor = '#3b82f6';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
-                    }
-                  }}
-                >
-                  {submitting ? 'Submitting...' : 'Submit Score'}
-                </button>
-              </form>
+                  >
+                    {submitting ? 'Submitting...' : 'Submit Score'}
+                  </button>
+                </form>
+              </div>
             )}
             
             <h3 style={{ 
@@ -568,7 +742,9 @@ const HighScores: React.FC<HighScoresProps> = ({
                           if (score.id === deviceId) {
                             e.currentTarget.style.backgroundColor = 'rgba(30, 64, 175, 0.5)';
                           } else {
-                            e.currentTarget.style.backgroundColor = 'rgba(51, 65, 85, 0.5)';
+                            e.currentTarget.style.backgroundColor = index % 2 === 0 
+                              ? 'rgba(30, 41, 59, 0.3)' 
+                              : 'rgba(31, 41, 55, 0.5)';
                           }
                         }}
                         onMouseOut={(e) => {
@@ -667,6 +843,11 @@ const HighScores: React.FC<HighScoresProps> = ({
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); }
         }
       `}</style>
     </div>

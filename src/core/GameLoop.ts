@@ -7,6 +7,7 @@ export interface GameLoopOptions {
   fps?: number;
   maxFrameTime?: number;
   debug?: boolean;
+  maxUpdatesPerFrame?: number; // Add limit to updates per frame
 }
 
 export default class GameLoop {
@@ -15,6 +16,7 @@ export default class GameLoop {
   private frameDuration: number;
   private maxFrameTime: number;
   private debug: boolean;
+  private maxUpdatesPerFrame: number; // Max physics updates per frame
   
   // State
   private running: boolean = false;
@@ -25,6 +27,13 @@ export default class GameLoop {
   private frameTime: number = 0;
   private currentFps: number = 0;
   private fpsUpdateTime: number = 0;
+  private lastUpdateDuration: number = 0;
+  private lastRenderDuration: number = 0;
+  
+  // Performance monitoring
+  private slowFrameCount: number = 0;
+  private totalFrameCount: number = 0;
+  private performanceInterval: number | null = null;
   
   // Callbacks
   private updateCallback: ((deltaTime: number) => void) | null = null;
@@ -35,6 +44,7 @@ export default class GameLoop {
     this.frameDuration = 1000 / this.fps;
     this.maxFrameTime = options.maxFrameTime || 250;
     this.debug = options.debug || false;
+    this.maxUpdatesPerFrame = options.maxUpdatesPerFrame || 5; // Prevent spiral of death
     
     if (this.debug) {
       console.log(`Game Loop initialized at ${this.fps} FPS (${this.frameDuration.toFixed(2)}ms per frame)`);
@@ -66,12 +76,32 @@ export default class GameLoop {
     this.fpsUpdateTime = this.lastFrameTime;
     this.accumulator = 0;
     this.frames = 0;
+    this.slowFrameCount = 0;
+    this.totalFrameCount = 0;
     
+    // Start performance monitoring if in debug mode
     if (this.debug) {
-      console.log('Game Loop started');
+      // Report performance stats every 5 seconds
+      this.performanceInterval = window.setInterval(() => {
+        const slowFramePercentage = this.totalFrameCount > 0 
+          ? (this.slowFrameCount / this.totalFrameCount) * 100 
+          : 0;
+          
+        console.log(`Performance: ${this.slowFrameCount}/${this.totalFrameCount} slow frames (${slowFramePercentage.toFixed(1)}%)`);
+        console.log(`Last update: ${this.lastUpdateDuration.toFixed(2)}ms, Last render: ${this.lastRenderDuration.toFixed(2)}ms`);
+        
+        // Reset counters
+        this.slowFrameCount = 0;
+        this.totalFrameCount = 0;
+      }, 5000);
     }
     
-    this.loop(this.lastFrameTime);
+    // Request first frame
+    this.frameId = requestAnimationFrame((time) => this.loop(time));
+    
+    if (this.debug) {
+      console.log('Game loop started');
+    }
   }
   
   /**
@@ -87,8 +117,14 @@ export default class GameLoop {
       this.frameId = null;
     }
     
+    // Clear performance monitoring
+    if (this.performanceInterval !== null) {
+      clearInterval(this.performanceInterval);
+      this.performanceInterval = null;
+    }
+    
     if (this.debug) {
-      console.log('Game Loop stopped');
+      console.log('Game loop stopped');
     }
   }
   
@@ -104,8 +140,13 @@ export default class GameLoop {
     let frameTime = timestamp - this.lastFrameTime;
     this.lastFrameTime = timestamp;
     
+    // Track frame for performance monitoring
+    this.totalFrameCount++;
+    
     // Cap max frame time to prevent spiral of death
     if (frameTime > this.maxFrameTime) {
+      this.slowFrameCount++;
+      
       if (this.debug) {
         console.warn(`Long frame time: ${frameTime.toFixed(2)}ms (capped at ${this.maxFrameTime}ms)`);
       }
@@ -130,20 +171,36 @@ export default class GameLoop {
     // Add frame time to the accumulator
     this.accumulator += frameTime;
     
-    // Fixed timestep updates
-    while (this.accumulator >= this.frameDuration) {
+    // Fixed timestep updates - limit to prevent spiral of death
+    let updateCount = 0;
+    const updateStart = performance.now();
+    
+    while (this.accumulator >= this.frameDuration && updateCount < this.maxUpdatesPerFrame) {
       // Update game state
       if (this.updateCallback) {
         this.updateCallback(this.frameDuration);
       }
       
       this.accumulator -= this.frameDuration;
+      updateCount++;
+    }
+    
+    this.lastUpdateDuration = performance.now() - updateStart;
+    
+    // If we hit the update limit, discard remaining time to prevent lag
+    if (updateCount >= this.maxUpdatesPerFrame && this.accumulator > this.frameDuration) {
+      if (this.debug) {
+        console.warn(`Max updates per frame (${this.maxUpdatesPerFrame}) reached, discarding ${this.accumulator.toFixed(2)}ms of simulation time`);
+      }
+      this.accumulator = 0;
     }
     
     // Render at whatever FPS the browser wants
+    const renderStart = performance.now();
     if (this.renderCallback) {
       this.renderCallback();
     }
+    this.lastRenderDuration = performance.now() - renderStart;
   }
   
   /**
@@ -154,13 +211,14 @@ export default class GameLoop {
   }
   
   /**
-   * Get debug info
+   * Get detailed debug info about the game loop
    */
   public getDebugInfo(): object {
     return {
       fps: this.currentFps,
-      targetFps: this.fps,
-      frameTime: this.frameTime / Math.max(1, this.frames),
+      frameDuration: this.frameDuration,
+      updateTime: this.lastUpdateDuration,
+      renderTime: this.lastRenderDuration,
       running: this.running
     };
   }

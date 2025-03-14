@@ -55,6 +55,9 @@ export const Canvas: React.FC<GameProps> = ({
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isHighScoresOpen, setIsHighScoresOpen] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [modalCooldown, setModalCooldown] = useState<boolean>(false);
+  const [gameState, setGameState] = useState<'playing' | 'crashed' | 'idle' | 'highScoreShown'>('idle');
+  const [deviceId, setDeviceId] = useState<string | null>(null);
   
   // Background image references
   const backgroundImagesRef = useRef<BackgroundImages>({
@@ -104,9 +107,92 @@ export const Canvas: React.FC<GameProps> = ({
     imagesLoading.buildings.src = '/images/background-buildings.png';
     imagesLoading.ground.src = '/images/background-ground.png';
     
+    // Pre-set dimensions to avoid layout shifts
+    const imageDimensions = {
+      sky: { width: 1600, height: 600 },
+      mountains: { width: 1600, height: 300 },
+      buildings: { width: 1600, height: 250 },
+      ground: { width: 1600, height: 200 }
+    };
+    
+    // Pre-set dimensions to help browser rendering
+    Object.keys(imagesLoading).forEach(key => {
+      const img = imagesLoading[key as keyof BackgroundImages];
+      const dims = imageDimensions[key as keyof typeof imageDimensions];
+      img.width = dims.width;
+      img.height = dims.height;
+      
+      // Enable image-rendering optimization for pixel art
+      (img as any).style = 'image-rendering: pixelated;';
+    });
+    
     // Track loaded images
     let loadedCount = 0;
     const totalImages = Object.keys(imagesLoading).length;
+    
+    // Create fallback images for any that fail to load
+    const createFallbackImage = (key: keyof BackgroundImages) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const dims = imageDimensions[key];
+      
+      if (ctx) {
+        canvas.width = dims.width;
+        canvas.height = dims.height;
+        
+        // Fill with appropriate fallback pattern based on the image type
+        switch(key) {
+          case 'sky':
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            break;
+          case 'mountains':
+            ctx.fillStyle = '#4B6455';
+            // Draw some triangles for mountains
+            for (let i = 0; i < 5; i++) {
+              const x = i * (canvas.width / 5);
+              const width = canvas.width / 4;
+              const height = 100 + (i % 3) * 50;
+              ctx.beginPath();
+              ctx.moveTo(x, canvas.height);
+              ctx.lineTo(x + width/2, canvas.height - height);
+              ctx.lineTo(x + width, canvas.height);
+              ctx.fill();
+            }
+            break;
+          case 'buildings':
+            ctx.fillStyle = '#333';
+            // Draw some rectangles for buildings
+            for (let i = 0; i < 8; i++) {
+              const x = i * (canvas.width / 8);
+              const width = canvas.width / 9;
+              const height = 50 + (i % 4) * 40;
+              ctx.fillRect(x, canvas.height - height, width, height);
+            }
+            break;
+          case 'ground':
+            ctx.fillStyle = '#3e291e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Add some texture
+            ctx.strokeStyle = '#4a3528';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 20; i++) {
+              const x = i * (canvas.width / 20);
+              ctx.beginPath();
+              ctx.moveTo(x, 0);
+              ctx.lineTo(x + 30, canvas.height);
+              ctx.stroke();
+            }
+            break;
+        }
+      }
+      
+      const fallbackImg = new Image();
+      fallbackImg.src = canvas.toDataURL();
+      fallbackImg.width = dims.width;
+      fallbackImg.height = dims.height;
+      return fallbackImg;
+    };
     
     // Check if all background images are loaded
     const checkAllLoaded = () => {
@@ -133,7 +219,9 @@ export const Canvas: React.FC<GameProps> = ({
         
         img.onerror = (err) => {
           console.error(`Failed to load background image: ${key}`, err);
-          checkAllLoaded(); // Still count as loaded to avoid blocking the game
+          // Replace with fallback image instead of just counting it
+          imagesLoading[key as keyof BackgroundImages] = createFallbackImage(key as keyof BackgroundImages);
+          checkAllLoaded();
         };
       }
     });
@@ -173,23 +261,73 @@ export const Canvas: React.FC<GameProps> = ({
       } else {
         console.log(`[Initial Load] No saved high score found, using default:`, highScore);
       }
+      
+      // Also load device ID if available
+      const savedDeviceId = localStorage.getItem('skatewithbitcoinDeviceId');
+      if (savedDeviceId) {
+        setDeviceId(savedDeviceId);
+      }
     } catch (err) {
       console.error('Error loading high score from localStorage:', err);
     }
   }, []);
   
-  // Update high score when player's score changes
+  // Update high score when player's score changes and manage leaderboard opening
   useEffect(() => {
-    if (score > highScore) {
-      console.log(`High score state updated: ${score} > ${highScore}`);
-      setHighScore(score);
+    // Only proceed if player reference exists
+    if (!playerRef.current) return;
+    
+    const playerScore = playerRef.current.score;
+    
+    // Check if player's score is a new high score
+    if (playerScore > 0 && playerScore > highScore) {
+      console.log(`New high score achieved: ${playerScore} > ${highScore}`);
       
-      // Is player crashed? If so, this is the end of a game, show high scores
-      if (playerRef.current?.crashed) {
-        setIsHighScoresOpen(true);
+      // Update high score in state and ref
+      setHighScore(playerScore);
+      highScoreRef.current = playerScore;
+      
+      // Save to localStorage immediately
+      try {
+        localStorage.setItem('skatewithbitcoinHighScore', playerScore.toString());
+        console.log(`[Score Update] High score saved to localStorage: ${playerScore}`);
+      } catch (err) {
+        console.error('[Score Update] Error saving high score to localStorage:', err);
       }
     }
-  }, [score, highScore, playerRef.current?.crashed]);
+    
+    // If player has crashed, check for high score and show modal ONLY ONCE per game session
+    if (playerRef.current.crashed && gameState === 'playing') {
+      console.log('Player crashed with score:', playerScore);
+      setGameState('crashed');
+      
+      // Only show high scores if this is a new/equal high score
+      if (playerScore > 0 && playerScore >= highScore) {
+        console.log('Will show high scores due to new high score');
+        // Delay showing high scores to ensure game over screen is shown first
+        setTimeout(() => {
+          if (!isHighScoresOpen && !modalCooldown) {
+            console.log('Opening high score modal after crash');
+            setIsHighScoresOpen(true);
+            setGameState('highScoreShown');
+          }
+        }, 1500);
+      }
+    }
+  }, [playerRef.current?.score, playerRef.current?.crashed, highScore, isHighScoresOpen, modalCooldown, gameState]);
+  
+  // Add an effect to handle the modal cooldown
+  useEffect(() => {
+    if (!isHighScoresOpen && modalCooldown) {
+      // Reset the cooldown after a short delay
+      const cooldownTimeout = setTimeout(() => {
+        setModalCooldown(false);
+        console.log('Modal cooldown period ended');
+      }, 3000); // 3 second cooldown
+      
+      return () => clearTimeout(cooldownTimeout);
+    }
+  }, [isHighScoresOpen, modalCooldown]);
   
   // Function to start the game (exposed to UI)
   const handleStartGame = useCallback(() => {
@@ -219,19 +357,22 @@ export const Canvas: React.FC<GameProps> = ({
     }
   }, [debug, soundEnabled]);
   
-  // Handle high score submission
+  // Handle high score submission - enhanced to ensure callback is passed correctly
   const handleHighScoreSubmit = (name: string) => {
     console.log(`High score submitted by ${name}: ${score}`);
     
     // Create a verification hash using timestamp to prevent replay attacks
-    // This helps prevent score manipulation via direct API calls
     const timestamp = Date.now().toString();
     
-    // In a real implementation, we would generate a more secure hash
-    // For demonstration purposes, we're using a simple hash
-    // This should match the server's hash generation
+    // Save player name to localStorage immediately
+    try {
+      localStorage.setItem('skatewithbitcoinPlayerName', name);
+      console.log('Player name saved in handleHighScoreSubmit:', name);
+    } catch (err) {
+      console.error('Error saving player name:', err);
+    }
     
-    // No need to do anything else as the HighScores component handles the API call
+    // The actual API call is handled by the HighScores component
   };
   
   // Function to restart the game (exposed to user)
@@ -246,8 +387,15 @@ export const Canvas: React.FC<GameProps> = ({
           highScoreRef.current = playerRef.current.score;
           localStorage.setItem('skatewithbitcoinHighScore', playerRef.current.score.toString());
           
-          // Show high scores modal when player achieves a new high score
-          setIsHighScoresOpen(true);
+          // Reset game state for next session
+          setGameState('idle');
+          
+          // Always show high scores on restart if it's a high score
+          if (playerRef.current.score > 0 && !isHighScoresOpen && !modalCooldown) {
+            console.log('[Manual Restart] Showing high scores modal');
+            setIsHighScoresOpen(true);
+            return; // Exit early - we'll restart when modal is closed
+          }
         }
         
         // Reset all game state except high score
@@ -264,13 +412,15 @@ export const Canvas: React.FC<GameProps> = ({
         
         // Re-enable game
         setGameStarted(true);
+        // Reset game state to playing for next session
+        setGameState('playing');
         
         console.log('Game fully reset and restarted, high score preserved: ' + highScoreRef.current);
       }
     } catch (err) {
       console.error('Error in handleRestartGame:', err);
     }
-  }, []);
+  }, [highScore, isHighScoresOpen, modalCooldown]);
   
   // Set up game engine
   useEffect(() => {
@@ -543,8 +693,6 @@ export const Canvas: React.FC<GameProps> = ({
             } else if (collisionResult.type === 'score') {
               if (collisionResult.points) {
                 const pointsToAdd = collisionResult.points;
-                player.score += pointsToAdd;
-                
                 // Play score sound
                 if (soundManagerRef.current) {
                   soundManagerRef.current.play('score');
@@ -689,40 +837,52 @@ export const Canvas: React.FC<GameProps> = ({
           if (backgroundImagesLoaded && bgImages.ground) {
             const groundParallax = cameraOffsetRef.current * 1.0; // Full parallax for ground
             
-            // Draw the ground image twice to create a seamless loop
+            // Calculate the exact position once to avoid redundant calculations
             const groundWidth = bgImages.ground.width;
             const groundHeight = canvas.height - 400; // Adjust ground height to fill the entire bottom
             const groundY = 400;
+            const parallaxOffset = -groundParallax % groundWidth;
             
+            // Use double buffering technique - only draw what's visible plus a small buffer
+            // Draw first copy
             ctx.drawImage(
               bgImages.ground,
-              -groundParallax % groundWidth,
+              parallaxOffset,
               groundY,
-              groundWidth,
+              groundWidth, 
               groundHeight
             );
-            ctx.drawImage(
-              bgImages.ground,
-              (-groundParallax % groundWidth) + groundWidth,
-              groundY,
-              groundWidth,
-              groundHeight
-            );
+            
+            // Draw second copy only if it would be visible on screen
+            if (parallaxOffset + groundWidth < canvas.width) {
+              ctx.drawImage(
+                bgImages.ground,
+                parallaxOffset + groundWidth,
+                groundY,
+                groundWidth,
+                groundHeight
+              );
+            }
             
             // Draw additional ground fill beneath to ensure no blue showing
             ctx.fillStyle = '#3e291e'; // Match ground color
-            ctx.fillRect(0, groundY + groundHeight, canvas.width, canvas.height);
+            ctx.fillRect(0, groundY + groundHeight, canvas.width, canvas.height - (groundY + groundHeight));
           } else {
-            // Fallback if image not loaded
+            // Efficient fallback - just draw the ground once
             ctx.fillStyle = '#3e291e'; // Dark brown for ground
             ctx.fillRect(0, 400, canvas.width, canvas.height - 400);
             
-            // Draw ground lines (perspective)
+            // Draw fewer ground lines for better performance
+            const visibleWidth = canvas.width;
+            const lineSpacing = 100;
+            const linesNeeded = Math.ceil(visibleWidth / lineSpacing) + 1;
+            
             ctx.strokeStyle = '#4a3528';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            for (let i = 0; i < 20; i++) {
-              const lineX = ((i * 100) - (cameraOffsetRef.current % 100));
+            
+            for (let i = 0; i < linesNeeded; i++) {
+              const lineX = ((i * lineSpacing) - (cameraOffsetRef.current % lineSpacing));
               ctx.moveTo(lineX, 400);
               ctx.lineTo(lineX + 60, 500);
             }
@@ -988,20 +1148,11 @@ export const Canvas: React.FC<GameProps> = ({
   
   // Function to show high scores
   const showHighScores = useCallback(() => {
-    console.log('Show high scores button clicked');
-    setIsHighScoresOpen(true);
-  }, []);
-  
-  // Force high scores to open after crash
-  useEffect(() => {
-    if (playerRef.current?.crashed) {
-      console.log('Player crashed - showing high scores modal');
-      // Small delay to ensure game over screen is shown first
-      setTimeout(() => {
-        setIsHighScoresOpen(true);
-      }, 1000);
+    if (!modalCooldown) {
+      console.log('Show high scores button clicked');
+      setIsHighScoresOpen(true);
     }
-  }, [playerRef.current?.crashed]);
+  }, [modalCooldown]);
 
   return (
     <div className="fixed inset-0 flex flex-col bg-black overflow-hidden">
@@ -1199,8 +1350,14 @@ export const Canvas: React.FC<GameProps> = ({
       <HighScores 
         isOpen={isHighScoresOpen}
         onClose={() => {
-          console.log('Closing high scores modal');
+          console.log('Closing high scores modal, setting cooldown');
           setIsHighScoresOpen(false);
+          setModalCooldown(true); // Set cooldown when modal is closed
+          
+          // If we just showed high scores for a crash, reset the game state
+          if (gameState === 'highScoreShown' || gameState === 'crashed') {
+            setGameState('idle');
+          }
         }}
         currentScore={score}
         playerHighScore={highScore}
