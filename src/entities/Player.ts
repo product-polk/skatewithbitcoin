@@ -508,9 +508,10 @@ export default class Player {
       // Draw skateboard
       if (this.currentTrick !== 'none') {
         // Draw skateboard with trick animation
-        const boardWidth = this.width + 10;
-        const boardHeight = 5;
-        const boardX = screenX - 5;
+        // Increase skateboard dimensions for better visibility
+        const boardWidth = this.width + 20; // Increased from +10 to +20
+        const boardHeight = 10; // Increased from 5 to 10
+        const boardX = screenX - 10; // Adjust position for the width increase
         const boardY = this.y + this.height - 5 + yOffset;
         
         ctx.save();
@@ -535,23 +536,41 @@ export default class Player {
         }
         
         if (this.imagesLoaded && this.skateboardImage) {
-          // Draw skateboard image
+          // Draw skateboard image with increased dimensions
           ctx.drawImage(
             this.skateboardImage,
             -boardWidth / 2,
             -boardHeight / 2,
             boardWidth,
-            boardHeight * 2 // Double height for better visibility
+            boardHeight * 3 // Triple height for better visibility (increased from double)
           );
         } else {
-          // Fallback to rectangle if image not loaded
-          ctx.fillStyle = 'black';
+          // Improved fallback skateboard with more detail
+          // Main deck
+          ctx.fillStyle = '#222';
           ctx.fillRect(-boardWidth / 2, -boardHeight / 2, boardWidth, boardHeight);
           
-          // Draw skateboard details for better visualization
-          ctx.fillStyle = 'darkgray';
-          ctx.fillRect(-boardWidth / 2 + 5, -boardHeight / 2, 5, boardHeight);
-          ctx.fillRect(boardWidth / 2 - 10, -boardHeight / 2, 5, boardHeight);
+          // Add grip tape texture
+          ctx.fillStyle = '#111';
+          const gripSize = 1;
+          for (let i = -boardWidth / 2 + 2; i < boardWidth / 2 - 2; i += 3) {
+            ctx.fillRect(i, -boardHeight / 2 + 1, gripSize, boardHeight - 2);
+          }
+          
+          // Add trucks detail (metallic part that holds the wheels)
+          ctx.fillStyle = '#555';
+          const truckWidth = 8;
+          ctx.fillRect(-boardWidth / 2 + boardWidth * 0.15 - truckWidth/2, -boardHeight/2, truckWidth, boardHeight * 2);
+          ctx.fillRect(boardWidth / 2 - boardWidth * 0.15 - truckWidth/2, -boardHeight/2, truckWidth, boardHeight * 2);
+          
+          // Add wheels
+          ctx.fillStyle = 'white';
+          const wheelRadius = 4;
+          // Front and back wheels on both sides
+          ctx.beginPath();
+          ctx.arc(-boardWidth / 2 + boardWidth * 0.15, boardHeight * 0.75, wheelRadius, 0, Math.PI * 2);
+          ctx.arc(boardWidth / 2 - boardWidth * 0.15, boardHeight * 0.75, wheelRadius, 0, Math.PI * 2);
+          ctx.fill();
         }
         
         ctx.restore();
@@ -563,29 +582,53 @@ export default class Player {
         ctx.fillText(this.currentTrick.toUpperCase(), screenX + this.width / 2, this.y - 15);
       } else {
         // Regular skateboard when not doing tricks
-        const boardWidth = this.width + 10;
-        const boardHeight = 5;
-        const boardX = screenX - 5;
+        // Increase skateboard dimensions for better visibility
+        const boardWidth = this.width + 20; // Increased from +10 to +20
+        const boardHeight = 10; // Increased from 5 to 10
+        const boardX = screenX - 10; // Adjust position for the width increase
         const boardY = this.y + this.height - 5 + yOffset;
         
         if (this.imagesLoaded && this.skateboardImage) {
-          // Draw skateboard image
+          // Draw skateboard image with increased dimensions
           ctx.drawImage(
             this.skateboardImage,
             boardX,
             boardY,
             boardWidth,
-            boardHeight * 2 // Double height for better visibility
+            boardHeight * 3 // Triple height for better visibility (increased from double)
           );
         } else {
-          // Fallback to rectangle if image not loaded
-          ctx.fillStyle = 'black';
+          // Improved fallback skateboard with more detail
+          // Main deck
+          ctx.fillStyle = '#222';
           ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
           
-          // Draw wheels
+          // Add grip tape texture
+          ctx.fillStyle = '#111';
+          const gripSize = 1;
+          for (let i = boardX + 2; i < boardX + boardWidth - 2; i += 3) {
+            ctx.fillRect(i, boardY + 1, gripSize, boardHeight - 2);
+          }
+          
+          // Add 3D perspective with deck sides
+          ctx.fillStyle = '#8B4513'; // Wood color for sides
+          ctx.fillRect(boardX, boardY + boardHeight, boardWidth, 2);
+          
+          // Draw wheels with 3D perspective
           ctx.fillStyle = 'white';
-          ctx.fillRect(screenX - 3, this.y + this.height, 6, 3);
-          ctx.fillRect(screenX + this.width - 3, this.y + this.height, 6, 3);
+          // Front wheels
+          ctx.fillRect(screenX - 3, this.y + this.height, 8, 5);
+          // Back wheels
+          ctx.fillRect(screenX + this.width - 5, this.y + this.height, 8, 5);
+          
+          // Add trucks (metal parts that hold the wheels)
+          ctx.fillStyle = '#555';
+          ctx.fillRect(screenX - 5, this.y + this.height - 1, 12, 2);
+          ctx.fillRect(screenX + this.width - 7, this.y + this.height - 1, 12, 2);
+          
+          // Add shadow for depth
+          ctx.fillStyle = 'rgba(0,0,0,0.3)';
+          ctx.fillRect(boardX + 5, boardY + boardHeight + 5, boardWidth - 10, 2);
         }
       }
       
