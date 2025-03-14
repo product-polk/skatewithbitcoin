@@ -42,6 +42,13 @@ export default class Player {
   public trickTimer: number = 0;
   public crashed: boolean = false;
   
+  // Power-up state
+  public currentPowerUp: TrickType = 'none';  // Currently collected power-up
+  public powerUpIndicatorAlpha: number = 0;   // For flashing the power-up indicator
+  public powerUpMessageTimer: number = 0;     // Timer for showing power-up messages
+  private pendingPowerUp: boolean = false;    // Flag to indicate a pending power-up execution
+  private powerUpDelay: number = 50;          // Delay timer for pending power-up
+  
   // Animation properties
   private frameCount: number = 0;
   private jumpCooldown: number = 0;
@@ -123,6 +130,31 @@ export default class Player {
         this.jumpCooldown -= deltaTime;
       }
       
+      // Update power-up indicator animation
+      if (this.currentPowerUp !== 'none') {
+        // More noticeable pulsing animation for the power-up indicator
+        this.powerUpIndicatorAlpha = 0.6 + Math.sin(this.frameCount * 0.15) * 0.4;
+      }
+      
+      // Update power-up message timer
+      if (this.powerUpMessageTimer > 0) {
+        this.powerUpMessageTimer -= deltaTime;
+      }
+      
+      // Handle pending power-up activation
+      if (this.pendingPowerUp) {
+        this.powerUpDelay -= deltaTime;
+        if (this.powerUpDelay <= 0) {
+          this.pendingPowerUp = false;
+          this.powerUpDelay = 50; // Reset for next time
+          
+          // Apply the power-up if we still have one and aren't already doing a trick
+          if (this.currentPowerUp !== 'none' && this.currentTrick === 'none') {
+            this.usePowerUp();
+          }
+        }
+      }
+      
       // Always move forward when skating
       if (this.state === 'skating') {
         this.velocityX = this.speed;
@@ -193,8 +225,8 @@ export default class Player {
     try {
       if (this.crashed || this.state === 'crashed') return;
       
-      // Jump input
-      if (inputManager.wasJustPressed('jump') && this.jumpCooldown <= 0) {
+      // Jump input - only allow if no trick is currently in progress
+      if (inputManager.wasJustPressed('jump') && this.jumpCooldown <= 0 && this.currentTrick === 'none') {
         if (this.onGround || this.onRail) {
           this.jump();
           // Enable double jump after first jump from ground
@@ -217,14 +249,22 @@ export default class Player {
         }
       }
       
-      // Trick input (only when in the air)
-      if (!this.onGround && !this.onRail && this.currentTrick === 'none') {
-        if (inputManager.wasJustPressed('trickKickflip')) {
-          this.startTrick('kickflip');
-        } else if (inputManager.wasJustPressed('trick360Flip')) {
-          this.startTrick('360flip');
-        } else if (inputManager.wasJustPressed('trickHeelflip')) {
-          this.startTrick('heelflip');
+      // Check if any key is pressed EXCEPT jump/spacebar
+      const anyKeyPressed = inputManager.hasAnyKeyJustPressed();
+      const jumpPressed = inputManager.wasJustPressed('jump');
+      
+      // Only consider non-jump key presses when we have a power-up and no active trick
+      if (anyKeyPressed && !jumpPressed && this.currentPowerUp !== 'none' && this.currentTrick === 'none') {
+        if (this.onGround || this.onRail) {
+          // If on ground, jump and queue power-up in one action
+          this.jump();
+          
+          // Schedule the trick to happen shortly after the jump
+          this.pendingPowerUp = true;
+          this.powerUpDelay = 50; // 50ms delay
+        } else {
+          // If already in the air, just use the power-up immediately
+          this.usePowerUp();
         }
       }
     } catch (err) {
@@ -374,6 +414,44 @@ export default class Player {
   }
   
   /**
+   * Collect a power-up
+   */
+  public collectPowerUp(trickType: TrickType): void {
+    try {
+      // Only collect if we don't already have a power-up
+      if (this.currentPowerUp === 'none' && trickType !== 'none') {
+        this.currentPowerUp = trickType;
+        this.powerUpIndicatorAlpha = 1.0;
+        this.powerUpMessageTimer = 2000; // Show message for 2 seconds
+        
+        console.log(`Collected power-up: ${trickType}`);
+      }
+    } catch (err) {
+      console.error('Error in Player.collectPowerUp:', err);
+    }
+  }
+  
+  /**
+   * Use the current power-up to do a trick
+   */
+  public usePowerUp(): void {
+    try {
+      if (this.currentPowerUp !== 'none' && this.currentTrick === 'none') {
+        // Start the trick using the collected power-up
+        this.startTrick(this.currentPowerUp);
+        
+        // Reset the power-up
+        this.currentPowerUp = 'none';
+        this.powerUpIndicatorAlpha = 0;
+        
+        console.log('Used power-up to perform trick');
+      }
+    } catch (err) {
+      console.error('Error in Player.usePowerUp:', err);
+    }
+  }
+  
+  /**
    * Reset player to starting state
    */
   public reset(x: number, y: number): void {
@@ -392,6 +470,13 @@ export default class Player {
       this.canDoubleJump = false;
       this.jumpCooldown = 0;
       this.frameCount = 0;
+      
+      // Reset power-up state
+      this.currentPowerUp = 'none';
+      this.powerUpIndicatorAlpha = 0;
+      this.powerUpMessageTimer = 0;
+      this.pendingPowerUp = false;
+      this.powerUpDelay = 50;
       
       // Set a default speed when game starts
       this.velocityX = this.speed * 0.5;
@@ -693,23 +778,194 @@ export default class Player {
       ctx.textAlign = 'left';
       ctx.fillText(`Score: ${this.score}`, 20, 30);
       
+      // Enhanced power-up indicator
+      if (this.currentPowerUp !== 'none') {
+        // Draw power-up indicator
+        ctx.save();
+        
+        // Position in top-right corner
+        const indicatorX = width - 70;
+        const indicatorY = 40;
+        const radius = 28; // Larger size for better visibility
+        
+        // Add attention-grabbing outer glow that pulses
+        const glowSize = 6 + Math.sin(this.frameCount * 0.15) * 4;
+        ctx.shadowColor = this.getTrickColor(this.currentPowerUp);
+        ctx.shadowBlur = glowSize;
+        ctx.globalAlpha = 0.8 + Math.sin(this.frameCount * 0.2) * 0.2;
+        
+        // Draw outer ring
+        ctx.strokeStyle = this.getTrickColor(this.currentPowerUp);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(indicatorX, indicatorY, radius + 4 + Math.sin(this.frameCount * 0.15) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Clean background with slight transparency for modern look
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = 'rgba(15, 20, 25, 0.9)'; // Dark transparent background
+        ctx.beginPath();
+        ctx.arc(indicatorX, indicatorY, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Choose color based on trick type - cleaner, modern colors
+        let trickColor = this.getTrickColor(this.currentPowerUp);
+        
+        // Inner colored circle
+        ctx.globalAlpha = 0.9 + this.powerUpIndicatorAlpha * 0.1; // More pronounced pulsing
+        ctx.fillStyle = trickColor;
+        ctx.beginPath();
+        ctx.arc(indicatorX, indicatorY, radius - 6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Trick label/icon with clean typography
+        ctx.globalAlpha = 1.0;
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 20px Arial'; // Larger font for better visibility
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        let label = 'K';
+        if (this.currentPowerUp === '360flip') label = '3';
+        if (this.currentPowerUp === 'heelflip') label = 'H';
+        
+        ctx.fillText(label, indicatorX, indicatorY);
+        
+        // Attention-grabbing "USE" instruction
+        ctx.font = '13px Arial';
+        ctx.fillStyle = 'white';
+        ctx.globalAlpha = 0.7 + Math.sin(this.frameCount * 0.15) * 0.3; // Pulsing text
+        ctx.textAlign = 'center';
+        
+        // Animated instruction text
+        const pulseScale = 1 + Math.sin(this.frameCount * 0.15) * 0.1;
+        ctx.save();
+        ctx.translate(indicatorX, indicatorY + radius + 14);
+        ctx.scale(pulseScale, pulseScale);
+        ctx.fillText('PRESS ANY KEY!', 0, 0);
+        ctx.restore();
+        
+        // Draw small attention indicators around the power-up
+        const arrowCount = 3;
+        for (let i = 0; i < arrowCount; i++) {
+          const angle = Math.PI/2 - Math.PI/8 + (i - 1) * Math.PI/8;
+          const arrowX = indicatorX + Math.cos(angle) * (radius + 12);
+          const arrowY = indicatorY + Math.sin(angle) * (radius + 12);
+          const alpha = 0.6 + Math.sin(this.frameCount * 0.15 + i) * 0.4;
+          
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.translate(arrowX, arrowY);
+          ctx.rotate(angle + Math.PI/2);
+          
+          // Draw small arrow
+          ctx.fillStyle = 'white';
+          ctx.beginPath();
+          ctx.moveTo(0, -4);
+          ctx.lineTo(3, 0);
+          ctx.lineTo(-3, 0);
+          ctx.closePath();
+          ctx.fill();
+          
+          ctx.restore();
+        }
+        
+        ctx.restore();
+      }
+      
+      // Show power-up collection message - cleaner notification
+      if (this.powerUpMessageTimer > 0) {
+        ctx.save();
+        
+        // Fade in/out smoothly
+        const fadeInDuration = 300;
+        const fadeOutStart = 1500;
+        let alpha = 1.0;
+        
+        if (this.powerUpMessageTimer > 2000 - fadeInDuration) {
+          // Fade in
+          alpha = (2000 - this.powerUpMessageTimer) / fadeInDuration;
+        } else if (this.powerUpMessageTimer < fadeOutStart) {
+          // Fade out
+          alpha = this.powerUpMessageTimer / fadeOutStart;
+        }
+        
+        ctx.globalAlpha = alpha;
+        
+        // Clean, modern notification background
+        const notifWidth = 220;
+        const notifHeight = 50;
+        const notifX = width / 2 - notifWidth / 2;
+        const notifY = height / 2 - 50 - notifHeight / 2;
+        
+        // Rounded rectangle with shadow
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 3;
+        ctx.fillStyle = 'rgba(15, 20, 25, 0.85)';
+        
+        // Draw rounded rectangle
+        this.roundRect(ctx, notifX, notifY, notifWidth, notifHeight, 8);
+        
+        // Message text
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        if (this.currentPowerUp !== 'none') {
+          ctx.fillText(`${this.currentPowerUp.toUpperCase()} COLLECTED`, width / 2, notifY + 16);
+          ctx.font = '14px Arial';
+          ctx.fillText('Press any key (except SPACE) to use', width / 2, notifY + 36);
+        }
+        
+        ctx.restore();
+      }
+      
       // Current trick - only show the current trick now
       if (this.currentTrick !== 'none') {
         ctx.fillStyle = 'cyan';
         ctx.fillText(`${this.currentTrick.toUpperCase()}`, width / 2 - 50, height / 2);
       }
       
-      // Crashed text
-      if (this.crashed) {
-        ctx.fillStyle = 'red';
-        ctx.font = '36px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('CRASHED!', width / 2, height / 2 - 40);
-        ctx.font = '24px Arial';
-        ctx.fillText('Press SPACE to restart', width / 2, height / 2);
-      }
     } catch (err) {
       console.error('Error in Player.drawHUD:', err);
     }
+  }
+  
+  /**
+   * Helper method to get trick colors
+   */
+  private getTrickColor(trickType: TrickType): string {
+    switch (trickType) {
+      case 'kickflip':
+        return '#4dabf7'; // Clean blue
+      case '360flip':
+        return '#da77f2'; // Clean purple
+      case 'heelflip':
+        return '#69db7c'; // Clean green
+      default:
+        return '#fcc419'; // Clean yellow
+    }
+  }
+  
+  /**
+   * Helper function to draw rounded rectangles
+   */
+  private roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+    ctx.fill();
   }
 } 

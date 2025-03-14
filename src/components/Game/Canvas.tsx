@@ -41,8 +41,8 @@ interface BackgroundImages {
 }
 
 export const Canvas: React.FC<GameProps> = ({ 
-  width = 800, 
-  height = 500,
+  width = 1000, 
+  height = 600,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [fps, setFps] = useState(0);
@@ -294,20 +294,32 @@ export const Canvas: React.FC<GameProps> = ({
       // Draw initial loading screen
       const drawLoadingScreen = () => {
         try {
-          ctx.fillStyle = '#111';
+          // Use ground color as base background to prevent blue sections
+          ctx.fillStyle = '#3e291e';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           
           // Use background image for loading screen if loaded
           if (backgroundImagesLoaded && backgroundImagesRef.current.sky) {
             ctx.drawImage(
               backgroundImagesRef.current.sky,
-              0, 0, canvas.width, canvas.height
+              0, 0, canvas.width, canvas.height * 0.8 // Only draw sky to 80% of height
             );
+            
+            // Draw ground if available
+            if (backgroundImagesRef.current.ground) {
+              const groundY = 400;
+              const groundHeight = canvas.height - groundY;
+              ctx.drawImage(
+                backgroundImagesRef.current.ground,
+                0, groundY, canvas.width, groundHeight
+              );
+            }
           }
           
           ctx.fillStyle = 'white';
           ctx.font = '24px Arial';
           ctx.textAlign = 'center';
+          
           ctx.fillText('Skate with Bitcoin', canvas.width / 2, 150);
           
           ctx.font = '18px Arial';
@@ -317,7 +329,7 @@ export const Canvas: React.FC<GameProps> = ({
           ctx.fillText('SPACE/UP = Jump', canvas.width / 2, 280);
           ctx.fillText('LEFT = Slow down', canvas.width / 2, 305);
           ctx.fillText('RIGHT = Speed up', canvas.width / 2, 330);
-          ctx.fillText('Q/E/R = Tricks (in air)', canvas.width / 2, 355);
+          ctx.fillText('ANY KEY (except SPACE) = Use power-up (when available)', canvas.width / 2, 355);
         } catch (err) {
           console.error('Error in drawLoadingScreen:', err);
         }
@@ -604,8 +616,8 @@ export const Canvas: React.FC<GameProps> = ({
       // Render function
       gameLoop.setRenderCallback(() => {
         try {
-          // Clear canvas
-          ctx.fillStyle = '#111';
+          // Clear canvas - change the background to match ground color instead of blue/black
+          ctx.fillStyle = '#3e291e'; // Match the ground color
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           
           if (!gameStarted) {
@@ -618,7 +630,7 @@ export const Canvas: React.FC<GameProps> = ({
           
           // Draw sky (fixed background)
           if (backgroundImagesLoaded && bgImages.sky) {
-            ctx.drawImage(bgImages.sky, 0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bgImages.sky, 0, 0, canvas.width, canvas.height * 0.8); // Only draw sky to 80% of height
           } else {
             // Fallback if image not loaded
             ctx.fillStyle = '#222';
@@ -679,7 +691,7 @@ export const Canvas: React.FC<GameProps> = ({
             
             // Draw the ground image twice to create a seamless loop
             const groundWidth = bgImages.ground.width;
-            const groundHeight = 100;
+            const groundHeight = canvas.height - 400; // Adjust ground height to fill the entire bottom
             const groundY = 400;
             
             ctx.drawImage(
@@ -696,10 +708,14 @@ export const Canvas: React.FC<GameProps> = ({
               groundWidth,
               groundHeight
             );
+            
+            // Draw additional ground fill beneath to ensure no blue showing
+            ctx.fillStyle = '#3e291e'; // Match ground color
+            ctx.fillRect(0, groundY + groundHeight, canvas.width, canvas.height);
           } else {
             // Fallback if image not loaded
             ctx.fillStyle = '#3e291e'; // Dark brown for ground
-            ctx.fillRect(0, 400, canvas.width, 100);
+            ctx.fillRect(0, 400, canvas.width, canvas.height - 400);
             
             // Draw ground lines (perspective)
             ctx.strokeStyle = '#4a3528';
@@ -804,8 +820,8 @@ export const Canvas: React.FC<GameProps> = ({
             // Get the parent container dimensions
             const container = canvas.parentElement;
             if (container) {
-              // Get available space (accounting for the footer)
-              const availableHeight = window.innerHeight - 40; // Subtract footer height
+              // Get available space (accounting for minimal UI elements)
+              const availableHeight = window.innerHeight - 30; // Smaller footer buffer
               const availableWidth = container.clientWidth;
               
               console.log(`Available space: ${availableWidth}x${availableHeight}`);
@@ -813,16 +829,16 @@ export const Canvas: React.FC<GameProps> = ({
               // Game aspect ratio
               const aspectRatio = width / height;
               
-              // Calculate optimal dimensions to fill the space
+              // Calculate optimal dimensions to fill the space better
               let newWidth, newHeight;
               
               if (availableWidth / availableHeight > aspectRatio) {
-                // Container is wider than needed - use available height
-                newHeight = availableHeight;
+                // Container is wider than needed - use most of available height
+                newHeight = availableHeight * 0.95; // Use 95% of available height
                 newWidth = newHeight * aspectRatio;
               } else {
-                // Container is taller - use available width
-                newWidth = availableWidth;
+                // Container is taller - use most of available width
+                newWidth = availableWidth * 0.98; // Use 98% of available width
                 newHeight = newWidth / aspectRatio;
               }
               
@@ -988,7 +1004,7 @@ export const Canvas: React.FC<GameProps> = ({
   }, [playerRef.current?.crashed]);
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-black">
+    <div className="fixed inset-0 flex flex-col bg-black overflow-hidden">
       {/* Main game container - takes all space */}
       <div className="flex-grow relative w-full flex items-center justify-center bg-black overflow-hidden">
         <canvas
@@ -1022,7 +1038,7 @@ export const Canvas: React.FC<GameProps> = ({
                   textShadow: '0 2px 8px rgba(0,0,0,0.5)'
                 }}
               >
-                Skate with Bitcoin
+                Skateboarding Game
               </h1>
               <p 
                 style={{
@@ -1052,7 +1068,7 @@ export const Canvas: React.FC<GameProps> = ({
                   }}
                 >
                   <span style={{ fontWeight: 'bold' }}>SPACE/UP</span> = Jump | <span style={{ fontWeight: 'bold' }}>LEFT/RIGHT</span> = Control Speed<br/>
-                  <span style={{ fontWeight: 'bold' }}>Q/E/R</span> = Tricks (in air)
+                  <span style={{ fontWeight: 'bold' }}>ANY KEY (except SPACE)</span> = Use power-ups (when available)
                 </p>
               </div>
             </div>
@@ -1070,6 +1086,8 @@ export const Canvas: React.FC<GameProps> = ({
             gap: '10px'
           }}
         >
+          {/* Restart Game Button removed */}
+          
           {/* Sound Toggle Button */}
           <button 
             onClick={toggleSound}
@@ -1139,9 +1157,9 @@ export const Canvas: React.FC<GameProps> = ({
           </button>
         </div>
         
-        {/* Game Over Screen */}
+        {/* Game Over Screen - Only show Start Game button, not Restart */}
         <div className="absolute bottom-16 left-0 right-0 flex justify-center">
-          {!gameStarted ? (
+          {!gameStarted && (
             <button 
               onClick={handleStartGame}
               style={{
@@ -1172,38 +1190,6 @@ export const Canvas: React.FC<GameProps> = ({
               }}
             >
               Start Game
-            </button>
-          ) : (
-            <button 
-              onClick={handleRestartGame}
-              style={{
-                backgroundColor: 'rgba(59, 130, 246, 0.85)',
-                color: 'white',
-                padding: '12px 24px',
-                borderRadius: '8px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                backdropFilter: 'blur(4px)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                opacity: '0.95'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
-                e.currentTarget.style.backgroundColor = 'rgba(37, 99, 235, 0.85)';
-                e.currentTarget.style.opacity = '1';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-                e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.85)';
-                e.currentTarget.style.opacity = '0.95';
-              }}
-            >
-              Restart Game
             </button>
           )}
         </div>

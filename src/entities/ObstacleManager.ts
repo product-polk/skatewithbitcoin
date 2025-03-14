@@ -1,4 +1,5 @@
-import Player from './Player';
+import Player, { TrickType } from './Player';
+import PowerUp from './PowerUp';
 
 // Define obstacle types
 export type ObstacleType = 'box' | 'ramp' | 'rail';
@@ -195,6 +196,7 @@ export class Obstacle {
 
 export default class ObstacleManager {
   obstacles: Obstacle[] = [];
+  powerUps: PowerUp[] = [];  // Array to store active power-ups
   lastObstacleTime: number = 0;
   minDistance: number = 300;
   spawnRate: number = 2000; // ms between obstacles
@@ -217,17 +219,40 @@ export default class ObstacleManager {
   private totalGameTime: number = 0; // Track total game time
   private speedIncreaseInterval: number = 4000; // Increase speed every 4 seconds (was 5 seconds)
   private lastSpeedIncreaseTime: number = 0; // Track when we last increased speed
-  private baseSpawnRate: number = 2200; // Base time between obstacles in ms (was 2500)
+  private baseSpawnRate: number = 5000; // Base time between obstacles in ms (increased from 3500 to 5000)
   private maxGameSpeed: number = 600; // Maximum game speed (was 550)
-  private spawnRateVariability: number = 0.9; // 90% random variance in spawn timing (was 80%)
+  private spawnRateVariability: number = 0.5; // 50% random variance in spawn timing (reduced from 70%)
   private lastObstacleDifficulty: number = 0; // Track how difficult the last obstacle was to ensure pacing
   private obstaclePatterns: number = 0; // Counter for obstacle patterns to help vary difficulty
-  private difficultyProgressionRate: number = 3.0; // How quickly difficulty increases (was 2.5)
+  private difficultyProgressionRate: number = 2.5; // How quickly difficulty increases (reduced from 3.0)
   private rapidSuccessionChance: number = 0.12; // 12% chance of creating rapid succession obstacles 
   private lastObstacleWasRapid: boolean = false; // Track if we just created a rapid succession sequence
   private initialSpeedBoost: number = 0; // Starting speed boost (now removed for playability)
   private doubleJumpObstacleChance: number = 0.08; // 8% chance of spawning obstacles that require double jumping
   private maxDoubleJumpHeight: number = 90; // Maximum height for double-jump obstacles (regular max is 60)
+  
+  // Power-up management properties
+  private timeSinceLastPowerUp: number = 0;  // Track time since last power-up spawned
+  private powerUpSpawnRate: number = 2000;  // Base time between power-ups in ms (reduced from 4000 to 2000)
+  private powerUpSpawnChance: number = 0.8;  // Increased chance from 50% to 80% for much higher frequency
+  private powerUpMinHeight: number = 100;   // Minimum height for power-ups (above ground)
+  private powerUpMaxHeight: number = 250;   // Maximum height for power-ups
+  private guaranteedPowerUpTimer: number = 0; // Timer to ensure at least one power-up per minute
+  private maxPowerUpsPerMinute: number = 8; // Maximum power-ups per minute (increased from 4 to 8)
+  private powerUpsInLastMinute: number = 0; // Track power-ups created in the last minute
+  private lastMinuteResetTime: number = 0;  // Track when we last reset the minute counter
+  private minPowerUpSpacing: number = 1200; // Minimum time (ms) between power-ups (reduced from 2500 to 1200)
+  private lastPowerUpDistance: number = 0;  // Track distance of last power-up for spacing
+  private earlyGamePowerUpLimit: number = 3; // Limit power-ups in early game (increased from 1 to 3)
+  private earlyPowerUpCount: number = 0;    // Counter for power-ups in early game
+  
+  // New variables for easier start
+  private gameStartGracePeriod: number = 8000; // 8 second grace period at start (increased from 6s)
+  private initialObstacleDelay: number = 8000; // Delay first obstacle by 8 seconds (increased from 5s)
+  private easyModeTimer: number = 20000; // Easy mode for first 20 seconds (increased from 18s)
+  private firstObstacleSpawned: boolean = false; // Track if we've spawned the first obstacle
+  private secondObstacleDelay: number = 4000; // Extra delay for the second obstacle
+  private obstacleCountInEasyMode: number = 0; // Track how many obstacles we've spawned in easy mode
   
   constructor() {
     this.reset();
@@ -236,59 +261,67 @@ export default class ObstacleManager {
   // Update all obstacles
   update(deltaTime: number, player: Player): CollisionResult {
     try {
-      // Track total game time for difficulty progression
+      // Update game time
       this.totalGameTime += deltaTime;
+      
+      // If spawn is active, count time since last obstacle
+      if (this.spawnActive) {
+        this.timeSinceLastObstacle += deltaTime;
+        this.timeSinceLastPowerUp += deltaTime;
+        this.guaranteedPowerUpTimer += deltaTime;
+      }
+      
+      // Don't activate obstacles until after the initial delay
+      if (!this.spawnActive && this.totalGameTime > this.initialObstacleDelay) {
+        console.log("Activating obstacle spawning after initial delay");
+        this.spawnActive = true;
+      }
+      
+      // Reset power-up counters every minute
+      if (this.totalGameTime - this.lastMinuteResetTime > 60000) {
+        this.powerUpsInLastMinute = 0;
+        this.lastMinuteResetTime = this.totalGameTime;
+        console.log("Resetting power-up minute counter");
+      }
+      
+      // Check for increasing game speed - gentler at start
+      if (this.gameSpeed < this.maxGameSpeed && 
+          this.totalGameTime - this.lastSpeedIncreaseTime > this.speedIncreaseInterval) {
+        // Increase speed every interval, but more gradually at the start
+        const oldSpeed = this.gameSpeed;
+        
+        // Slower speed increases in the first 15 seconds
+        let speedIncrease = 10; // Default increase
+        if (this.totalGameTime < this.easyModeTimer) {
+          speedIncrease = 5; // Half speed increase during easy mode
+        }
+        
+        this.gameSpeed = Math.min(this.maxGameSpeed, this.gameSpeed + speedIncrease);
+        this.lastSpeedIncreaseTime = this.totalGameTime;
+        
+        if (oldSpeed !== this.gameSpeed) {
+          console.log(`Game speed increased to ${this.gameSpeed.toFixed(2)}`);
+        }
+      }
       
       // Update camera offset (from player position)
       this.cameraOffset = Math.max(0, player.x - 100);
       
-      // Initial speed boost when game starts - more aggressive after initial grace period
+      // Initial speed boost when game starts - more gentle startup
       if (this.spawnActive && player.state === 'skating') {
-        if (this.totalGameTime < 3000) {
-          // First 3 seconds - gentle start
-          const startupBoost = Math.min(20, (this.totalGameTime / 3000) * 20);
-          player.speed = 200 + startupBoost;
+        if (this.totalGameTime < this.gameStartGracePeriod) {
+          // First few seconds - very gentle start (reduced from 20 to 10 for slower start)
+          const startupBoost = Math.min(10, (this.totalGameTime / this.gameStartGracePeriod) * 10);
+          player.speed = 180 + startupBoost; // Start at 180 instead of 200 for easier beginning
           this.gameSpeed = player.speed;
-        } else if (this.totalGameTime < 10000) {
-          // 3-10 seconds - more aggressive ramp up
-          const startupBoost = 20 + Math.min(40, ((this.totalGameTime - 3000) / 7000) * 40);
-          player.speed = 200 + startupBoost;
+        } else if (this.totalGameTime < this.easyModeTimer) {
+          // Next few seconds - gentler ramp up (reduced boost from 40 to 25)
+          const startupBoost = 10 + Math.min(25, ((this.totalGameTime - this.gameStartGracePeriod) / 
+                              (this.easyModeTimer - this.gameStartGracePeriod)) * 25);
+          player.speed = 180 + startupBoost; // Adjusted base speed
           this.gameSpeed = player.speed;
         }
       }
-      
-      // Adjust player speed based on game progression - more aggressive increases
-      if (this.spawnActive && !player.crashed && 
-          this.totalGameTime - this.lastSpeedIncreaseTime > this.speedIncreaseInterval) {
-        
-        this.lastSpeedIncreaseTime = this.totalGameTime;
-        
-        // Calculate how much to increase speed - more aggressive scaling overall
-        const progressFactor = Math.min(1, this.gameSpeed / this.maxGameSpeed);
-        
-        // More aggressive speed increases
-        let speedIncrease = 30; // Base increase (was 25)
-        
-        // Early game gets bigger boosts
-        if (this.totalGameTime < 20000) { // First 20 seconds
-          speedIncrease = 35; // More aggressive early boost (was 30)
-        } else if (progressFactor < 0.6) {
-          speedIncrease = 30 * (1 - progressFactor * 0.4); // Less steep falloff (was 0.5)
-        } else {
-          speedIncrease = 20 * (1 - progressFactor * 0.7); // Larger increases at high speeds (was 15 * 0.8)
-        }
-        
-        // Only increase if below maximum
-        if (this.gameSpeed < this.maxGameSpeed) {
-          const newSpeed = Math.min(this.maxGameSpeed, this.gameSpeed + speedIncrease);
-          console.log(`Increasing game speed from ${this.gameSpeed.toFixed(1)} to ${newSpeed.toFixed(1)}`);
-          this.gameSpeed = newSpeed;
-          player.speed = newSpeed; // Update player speed directly
-        }
-      }
-      
-      // Update game speed based on player speed
-      player.speed = this.gameSpeed;
       
       // Track total distance traveled
       this.totalDistance += (player.velocityX * deltaTime / 1000);
@@ -365,6 +398,25 @@ export default class ObstacleManager {
         // Calculate final spawn rate with all factors
         let finalSpawnRate = adjustedBaseRate + randomVariance + difficultyBuffer;
         
+        // Significantly slower obstacles at the very beginning
+        if (this.totalGameTime < this.easyModeTimer) {
+          // Add an additional delay that decreases as game time increases
+          const startBonus = Math.max(0, (this.easyModeTimer - this.totalGameTime) / 2);
+          finalSpawnRate += startBonus;
+          
+          // Extra delay for the first few obstacles
+          if (this.obstacleCountInEasyMode < 3) {
+            finalSpawnRate += (3 - this.obstacleCountInEasyMode) * 1500;
+          }
+        }
+        
+        // Special handling for first two obstacles
+        if (!this.firstObstacleSpawned) {
+          finalSpawnRate = this.initialObstacleDelay;
+        } else if (this.obstacleCountInEasyMode === 1) {
+          finalSpawnRate += this.secondObstacleDelay;
+        }
+        
         // Minimum reaction time decreases with speed - more aggressive
         const minReactionTime = 700 - (speedFactor * 270); // Slightly faster response required
         let safeSpawnRate = Math.max(minReactionTime, finalSpawnRate);
@@ -372,8 +424,8 @@ export default class ObstacleManager {
         // Occasionally force earlier spawn for rapid succession (after 10 seconds)
         let rapidSuccession = false;
         
-        // Rapid succession appears after 10 seconds now
-        if (this.totalGameTime > 10000 && !this.lastObstacleWasRapid && 
+        // Rapid succession appears after 15 seconds now (was 10)
+        if (this.totalGameTime > 15000 && !this.lastObstacleWasRapid && 
             Math.random() < this.rapidSuccessionChance && 
             this.timeSinceLastObstacle > minReactionTime * 0.75) {
           
@@ -393,9 +445,25 @@ export default class ObstacleManager {
         
         if ((this.timeSinceLastObstacle > safeSpawnRate || surpriseSpawn) && this.canSpawnObstacle()) {
           // Create a new obstacle
-          const doubleJumpRequired = Math.random() < this.doubleJumpObstacleChance && this.totalGameTime > 15000;
-          this.createRandomObstacle(rapidSuccession, doubleJumpRequired);
+          // Initially no double-jump obstacles and lower chance of difficult obstacles in easy mode
+          const doubleJumpRequired = Math.random() < this.doubleJumpObstacleChance && 
+                                  this.totalGameTime > this.easyModeTimer + 5000; // No double jumps in easy mode
+          
+          // Make the game significantly easier for the first 20 seconds
+          const isEasyMode = this.totalGameTime < this.easyModeTimer;
+          this.createRandomObstacle(rapidSuccession, doubleJumpRequired, isEasyMode);
+          
           this.timeSinceLastObstacle = 0;
+          
+          // Update first obstacle tracking
+          if (!this.firstObstacleSpawned) {
+            this.firstObstacleSpawned = true;
+          }
+          
+          // Count obstacles in easy mode
+          if (isEasyMode) {
+            this.obstacleCountInEasyMode++;
+          }
           
           // More random pattern progression - higher chance of skipping
           if (Math.random() < 0.5) { // Increased randomness (was 0.4)
@@ -408,7 +476,79 @@ export default class ObstacleManager {
         }
       }
       
-      return { type: 'none' };
+      // Check if it's time to spawn a power-up
+      if (this.spawnActive && this.powerUpsInLastMinute < this.maxPowerUpsPerMinute && this.canSpawnPowerUp()) {
+        let shouldSpawn = Math.random() < this.powerUpSpawnChance;
+        
+        // Force spawn if we haven't had a power-up in a while (guaranteed spawn)
+        if (this.guaranteedPowerUpTimer >= 12000) { // Reduced from 20000 to 12000 seconds
+          shouldSpawn = true;
+          console.log("Forcing power-up spawn after 12 seconds");
+        }
+        
+        // Control early game power-up distribution
+        if (this.totalGameTime < this.easyModeTimer) {
+          // Limit the number of power-ups in early game
+          if (this.earlyPowerUpCount >= this.earlyGamePowerUpLimit) {
+            shouldSpawn = false;
+          } else if (shouldSpawn) {
+            // If we're spawning in early game, increment counter
+            this.earlyPowerUpCount++;
+          }
+        }
+        
+        // Prevent power-ups from spawning too close together in time
+        if (this.timeSinceLastPowerUp < this.minPowerUpSpacing) {
+          // Add a small chance to override the spacing requirement for more random distribution
+          if (Math.random() > 0.3) { // 30% chance to ignore minimum spacing
+            shouldSpawn = false;
+          }
+        }
+        
+        // Check minimum distance from last power-up position
+        if (this.powerUps.length > 0) {
+          const lastPowerUp = this.powerUps[this.powerUps.length - 1];
+          const minDistance = 250; // Reduced from 300 to 250
+          
+          if (lastPowerUp.x > 800 && lastPowerUp.x - 800 < minDistance) {
+            // Still allow some chance of closer power-ups
+            if (Math.random() > 0.4) { // 40% chance to ignore minimum distance
+              shouldSpawn = false; // Too close to previous power-up
+            }
+          }
+        }
+        
+        if (shouldSpawn) {
+          this.createRandomPowerUp();
+          this.powerUpsInLastMinute++;
+          this.guaranteedPowerUpTimer = 0;
+          this.timeSinceLastPowerUp = 0;
+        }
+      }
+      
+      // Remove off-screen obstacles
+      this.obstacles = this.obstacles.filter(obstacle => {
+        return obstacle.x + obstacle.width > -500; // Keep obstacles that are not too far off-screen
+      });
+      
+      // Remove off-screen power-ups
+      this.powerUps = this.powerUps.filter(powerUp => {
+        return powerUp.x + powerUp.width > -500 && powerUp.active; // Keep power-ups that are not too far off-screen and still active
+      });
+      
+      // Update obstacles
+      this.obstacles.forEach(obstacle => {
+        obstacle.update(deltaTime, player.velocityX);
+      });
+      
+      // Update power-ups
+      this.powerUps.forEach(powerUp => {
+        powerUp.update(deltaTime, player.velocityX);
+      });
+      
+      // Check collision with player
+      const collisionResult = this.checkCollisions(player);
+      return collisionResult;
     } catch (err) {
       console.error('Error in ObstacleManager.update:', err);
       return { type: 'none' };
@@ -444,7 +584,7 @@ export default class ObstacleManager {
   }
   
   // Create a random obstacle
-  createRandomObstacle(isRapidSuccession: boolean = false, isDoubleJumpObstacle: boolean = false) {
+  createRandomObstacle(isRapidSuccession: boolean = false, isDoubleJumpObstacle: boolean = false, isEasyMode: boolean = false) {
     try {
       const types: ObstacleType[] = ['box', 'ramp', 'rail'];
       
@@ -466,6 +606,11 @@ export default class ObstacleManager {
         this.lastObstacleType = Math.random() < 0.5 ? 'box' : 'ramp';
       }
       
+      // In easy mode, prefer ramps which are easier to jump over
+      if (isEasyMode && Math.random() < 0.7) {
+        this.lastObstacleType = 'ramp';
+      }
+      
       const type = this.lastObstacleType;
       
       // Increment type count
@@ -477,14 +622,19 @@ export default class ObstacleManager {
       // More aggressive difficulty scaling
       const distanceFactor = Math.min(0.95, (this.totalDistance / 2500) * this.difficultyProgressionRate); 
       const speedFactor = Math.min(0.95, (this.gameSpeed / this.maxGameSpeed) * 1.4); // Even more weight on speed
-      const difficultyFactor = Math.max(distanceFactor, speedFactor);
+      
+      // In easy mode, cap difficulty
+      let difficultyFactor = Math.max(distanceFactor, speedFactor);
+      if (isEasyMode) {
+        difficultyFactor = Math.min(difficultyFactor, 0.3); // Cap max difficulty in easy mode
+      }
       
       // Introduce more dynamic difficulty patterns
       let patternDifficulty = 0;
       
       // More extreme pattern difficulty variations
       if (this.obstaclePatterns >= 7) {
-        patternDifficulty = 0.6; // More challenging obstacle (was 0.5)
+        patternDifficulty = isEasyMode ? 0.2 : 0.6; // Lower difficulty in easy mode
       } else if (this.obstaclePatterns <= 2) {
         patternDifficulty = -0.15; // Easier obstacle for breathing room (was -0.2)
       }
@@ -507,7 +657,11 @@ export default class ObstacleManager {
       }
       
       // Higher difficulty ceiling but ensure still theoretically jumpable
-      const finalDifficulty = Math.min(0.95, difficultyFactor + patternDifficulty);
+      // In easy mode, further reduce difficulty
+      let finalDifficulty = Math.min(0.95, difficultyFactor + patternDifficulty);
+      if (isEasyMode) {
+        finalDifficulty = Math.min(finalDifficulty, 0.4); // Cap difficulty in easy mode
+      }
       
       switch (type) {
         case 'box':
@@ -744,9 +898,23 @@ export default class ObstacleManager {
   // Draw all obstacles with camera offset
   draw(ctx: CanvasRenderingContext2D) {
     try {
+      // Draw obstacles
       this.obstacles.forEach(obstacle => {
         obstacle.draw(ctx, this.cameraOffset);
       });
+      
+      // Draw power-ups
+      this.powerUps.forEach(powerUp => {
+        powerUp.draw(ctx, this.cameraOffset);
+      });
+      
+      // Draw ground - simple line across the bottom
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, this.groundY);
+      ctx.lineTo(800, this.groundY);
+      ctx.stroke();
       
       // Draw distance indicator in debug mode
       if (window.DEBUG_MODE) {
@@ -766,26 +934,176 @@ export default class ObstacleManager {
   reset() {
     try {
       this.obstacles = [];
+      this.powerUps = [];
       this.lastObstacleTime = 0;
-      this.timeSinceLastObstacle = 0;
-      this.cameraOffset = 0;
       this.totalDistance = 0;
-      this.spawnActive = false;
-      this.obstacleTypes = { 'box': 0, 'ramp': 0, 'rail': 0 };
-      this.lastObstacleType = null;
-      this.passedObstacles.clear();
-      
-      // Reset dynamic difficulty values
+      this.spawnActive = false; // Start with spawning disabled until after initial delay
+      this.timeSinceLastObstacle = 0;
+      this.timeSinceLastPowerUp = 0;
       this.totalGameTime = 0;
       this.lastSpeedIncreaseTime = 0;
-      this.gameSpeed = 200; // Reset to starting speed without boost
+      this.gameSpeed = 200 + this.initialSpeedBoost;
+      this.passedObstacles.clear();
+      this.lastObstacleWasRapid = false;
       this.lastObstacleDifficulty = 0;
       this.obstaclePatterns = 0;
-      this.lastObstacleWasRapid = false;
       
-      console.log("ObstacleManager reset");
+      // Reset power-up counters
+      this.guaranteedPowerUpTimer = 0;
+      this.powerUpsInLastMinute = 0;
+      this.lastMinuteResetTime = 0;
+      this.earlyPowerUpCount = 0;
+      
+      // Reset obstacle tracking
+      this.firstObstacleSpawned = false;
+      this.obstacleCountInEasyMode = 0;
+      
+      console.log('ObstacleManager reset');
     } catch (err) {
       console.error('Error in ObstacleManager.reset:', err);
+    }
+  }
+  
+  // Check if we can spawn a power-up based on time and spacing
+  canSpawnPowerUp(): boolean {
+    try {
+      // Don't spawn if we just started the game
+      if (this.totalGameTime < 2000) return false; // Reduced from 4000 to 2000
+      
+      // Don't spawn power-ups too frequently unless we need to guarantee one
+      if (this.timeSinceLastPowerUp < this.powerUpSpawnRate && this.guaranteedPowerUpTimer < 10000) return false; // Reduced from 15000 to 10000
+      
+      // Don't spawn more than the maximum per minute
+      if (this.powerUpsInLastMinute >= this.maxPowerUpsPerMinute) return false;
+      
+      // Random factor for variability in spawn times (reduced randomness to be more predictable)
+      const randomFactor = 0.9 + Math.random() * 0.2; // 90% to 110% randomness
+      
+      // Allow power-ups to spawn after appropriate delay or when guaranteed
+      return this.timeSinceLastPowerUp >= (this.powerUpSpawnRate * randomFactor) || this.guaranteedPowerUpTimer >= 12000; // Reduced from 20000 to 12000
+    } catch (err) {
+      console.error('Error in ObstacleManager.canSpawnPowerUp:', err);
+      return false;
+    }
+  }
+  
+  // Create a random power-up
+  createRandomPowerUp(): PowerUp {
+    try {
+      // Possible trick types
+      const trickTypes: TrickType[] = ['kickflip', '360flip', 'heelflip'];
+      
+      // Randomly select a trick type
+      const randomType = trickTypes[Math.floor(Math.random() * trickTypes.length)];
+      
+      // Calculate position - ensure power-ups are well-spaced
+      let x = 1000 + Math.random() * 200; // Base position
+      
+      // Add extra spacing in early game to prevent clumping
+      if (this.totalGameTime < this.easyModeTimer * 2) {
+        x += 200; // Reduced from 300 to 200 to allow more power-ups to appear
+      }
+      
+      // If we have existing power-ups, make sure we're far enough away from the last one
+      if (this.powerUps.length > 0) {
+        const lastPowerUp = this.powerUps[this.powerUps.length - 1];
+        const minSpacing = 300; // Reduced from 400 to 300
+        
+        if (x - lastPowerUp.x < minSpacing) {
+          x = lastPowerUp.x + minSpacing + Math.random() * 100; // Ensure minimum spacing (reduced from 200 to 100)
+        }
+      }
+      
+      // Random height between min and max
+      const y = this.groundY - this.powerUpMaxHeight + Math.random() * (this.powerUpMaxHeight - this.powerUpMinHeight);
+      
+      // Create the power-up
+      const powerUp = new PowerUp({
+        x,
+        y,
+        type: randomType
+      });
+      
+      // Add to power-ups array
+      this.powerUps.push(powerUp);
+      
+      console.log(`Created power-up: ${randomType} at (${x}, ${y})`);
+      
+      return powerUp;
+    } catch (err) {
+      console.error('Error in ObstacleManager.createRandomPowerUp:', err);
+      // Return a default power-up as fallback
+      const fallbackPowerUp = new PowerUp({
+        x: 1000,
+        y: this.groundY - 150,
+        type: 'kickflip'
+      });
+      this.powerUps.push(fallbackPowerUp);
+      return fallbackPowerUp;
+    }
+  }
+  
+  // Check collisions with both obstacles and power-ups
+  checkCollisions(player: Player): CollisionResult {
+    try {
+      // First check for obstacle collisions
+      for (const obstacle of this.obstacles) {
+        // Skip already hit obstacles
+        if (obstacle.hit) continue;
+        
+        const result = obstacle.checkCollision(player);
+        
+        // If there's a collision, mark the obstacle as hit and return result
+        if (result.type !== 'none') {
+          obstacle.hit = true;
+          
+          if (result.type === 'crash') {
+            console.log('Player crashed into obstacle');
+          } else if (result.type === 'score') {
+            console.log(`Player scored ${result.points} points from obstacle`);
+          }
+          
+          return result;
+        }
+        
+        // Track obstacles the player has passed
+        if (!this.passedObstacles.has(obstacle) && player.x > obstacle.x + obstacle.width) {
+          this.passedObstacles.add(obstacle);
+          
+          // Add score for passing obstacles
+          const points = this.getObstaclePointValue(obstacle);
+          if (points > 0) {
+            player.score += points;
+            console.log(`Player earned ${points} points for passing obstacle`);
+            return { type: 'score', points };
+          }
+        }
+      }
+      
+      // Then check for power-up collisions if player is in the air (jumping)
+      if ((player.state === 'jumping' || player.state === 'falling') && !player.crashed) {
+        for (const powerUp of this.powerUps) {
+          if (powerUp.checkCollision(player)) {
+            // Only collect if player doesn't already have a power-up
+            if (player.currentPowerUp === 'none') {
+              console.log(`Player collected power-up: ${powerUp.type}`);
+              powerUp.collect();
+              player.collectPowerUp(powerUp.type);
+              return { type: 'score', points: 2 }; // Small score bonus for collecting
+            } else {
+              console.log('Player already has a power-up, cannot collect another');
+              // Don't collect - just pass through
+              return { type: 'none' };
+            }
+          }
+        }
+      }
+      
+      // No collisions
+      return { type: 'none' };
+    } catch (err) {
+      console.error('Error in ObstacleManager.checkCollisions:', err);
+      return { type: 'none' };
     }
   }
 } 

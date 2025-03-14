@@ -65,6 +65,11 @@ export default class InputManager {
     );
   }
 
+  // Check if any key was just pressed this frame (used for power-up activation)
+  public hasAnyKeyJustPressed(): boolean {
+    return this.keysPressed.size > 0;
+  }
+
   // Bind keyboard event listeners
   public bindKeys(): void {
     const handleKeyDown = (e: KeyboardEvent) => {
