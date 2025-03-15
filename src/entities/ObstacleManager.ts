@@ -239,18 +239,31 @@ export default class ObstacleManager {
   
   // Power-up management properties
   private timeSinceLastPowerUp: number = 0;  // Track time since last power-up spawned
-  private powerUpSpawnRate: number = 2000;  // Base time between power-ups in ms (reduced from 4000 to 2000)
-  private powerUpSpawnChance: number = 0.8;  // Increased chance from 50% to 80% for much higher frequency
+  private powerUpSpawnRate: number = 2000;  // Base time between power-ups in ms
+  private powerUpSpawnChance: number = 0.8;  // Chance of spawning when conditions are met
   private powerUpMinHeight: number = 100;   // Minimum height for power-ups (above ground)
   private powerUpMaxHeight: number = 250;   // Maximum height for power-ups
   private guaranteedPowerUpTimer: number = 0; // Timer to ensure at least one power-up per minute
-  private maxPowerUpsPerMinute: number = 8; // Maximum power-ups per minute (increased from 4 to 8)
+  private maxPowerUpsPerMinute: number = 8; // Maximum power-ups per minute
   private powerUpsInLastMinute: number = 0; // Track power-ups created in the last minute
   private lastMinuteResetTime: number = 0;  // Track when we last reset the minute counter
-  private minPowerUpSpacing: number = 1200; // Minimum time (ms) between power-ups (reduced from 2500 to 1200)
+  private minPowerUpSpacing: number = 1200; // Minimum time (ms) between power-ups
   private lastPowerUpDistance: number = 0;  // Track distance of last power-up for spacing
-  private earlyGamePowerUpLimit: number = 3; // Limit power-ups in early game (increased from 1 to 3)
+  private earlyGamePowerUpLimit: number = 3; // Limit power-ups in early game
   private earlyPowerUpCount: number = 0;    // Counter for power-ups in early game
+  
+  // New powerup system properties
+  private powerUpInitialDelay: number = 4000; // Initial delay before any powerups can spawn
+  private powerUpSystemReady: boolean = false; // Flag to track if the initial delay has passed
+  private lastPowerUpXPosition: number = 0; // Track last powerup x position for spacing
+  private minSpatialDistance: number = 350; // Minimum distance between powerups
+  private consecutivePowerupChance: number = 0.15; // Chance of a quick followup powerup
+  private isInConsecutiveSpawn: boolean = false; // Flag to track if we're in a consecutive spawn sequence
+  private allowConsecutiveInEarlyGame: boolean = false; // Flag to control consecutive spawns in early game
+  
+  // New variables for mid-game and late-game frequency control
+  private midGameSpawnRateReduction: number = 0.8; // Spawn 20% faster in mid-game
+  private lateGameSpawnRateReduction: number = 0.65; // Spawn 35% faster in late game
   
   // New variables for easier start
   private gameStartGracePeriod: number = 8000; // 8 second grace period at start (increased from 6s)
@@ -294,8 +307,11 @@ export default class ObstacleManager {
       // If spawn is active, count time since last obstacle
       if (this.spawnActive) {
         this.timeSinceLastObstacle += deltaTime;
-        this.timeSinceLastPowerUp += deltaTime;
-        this.guaranteedPowerUpTimer += deltaTime;
+        
+        // Ensure timers can't be negative (handles first run and restarts)
+        // This ensures a more consistent experience across game restarts
+        this.timeSinceLastPowerUp = Math.max(0, this.timeSinceLastPowerUp + deltaTime);
+        this.guaranteedPowerUpTimer = Math.max(0, this.guaranteedPowerUpTimer + deltaTime);
       }
       
       // Don't activate obstacles until after the initial delay
@@ -524,54 +540,9 @@ export default class ObstacleManager {
         }
       }
       
-      // Check if it's time to spawn a power-up
-      if (this.spawnActive && this.powerUpsInLastMinute < this.maxPowerUpsPerMinute && this.canSpawnPowerUp()) {
-        let shouldSpawn = Math.random() < this.powerUpSpawnChance;
-        
-        // Force spawn if we haven't had a power-up in a while (guaranteed spawn)
-        if (this.guaranteedPowerUpTimer >= 12000) { // Reduced from 20000 to 12000 seconds
-          shouldSpawn = true;
-          console.log("Forcing power-up spawn after 12 seconds");
-        }
-        
-        // Control early game power-up distribution
-        if (this.totalGameTime < this.easyModeTimer) {
-          // Limit the number of power-ups in early game
-          if (this.earlyPowerUpCount >= this.earlyGamePowerUpLimit) {
-            shouldSpawn = false;
-          } else if (shouldSpawn) {
-            // If we're spawning in early game, increment counter
-            this.earlyPowerUpCount++;
-          }
-        }
-        
-        // Prevent power-ups from spawning too close together in time
-        if (this.timeSinceLastPowerUp < this.minPowerUpSpacing) {
-          // Add a small chance to override the spacing requirement for more random distribution
-          if (Math.random() > 0.3) { // 30% chance to ignore minimum spacing
-            shouldSpawn = false;
-          }
-        }
-        
-        // Check minimum distance from last power-up position
-        if (this.powerUps.length > 0) {
-          const lastPowerUp = this.powerUps[this.powerUps.length - 1];
-          const minDistance = 250; // Reduced from 300 to 250
-          
-          if (lastPowerUp.x > 800 && lastPowerUp.x - 800 < minDistance) {
-            // Still allow some chance of closer power-ups
-            if (Math.random() > 0.4) { // 40% chance to ignore minimum distance
-              shouldSpawn = false; // Too close to previous power-up
-            }
-          }
-        }
-        
-        if (shouldSpawn) {
-          this.createRandomPowerUp();
-          this.powerUpsInLastMinute++;
-          this.guaranteedPowerUpTimer = 0;
-          this.timeSinceLastPowerUp = 0;
-        }
+      // Use our new powerup system (replacing the old logic)
+      if (this.spawnActive) {
+        this.updatePowerUpSystem(deltaTime, this.totalGameTime);
       }
       
       // Remove off-screen obstacles
@@ -589,7 +560,7 @@ export default class ObstacleManager {
         obstacle.update(deltaTime, player.velocityX);
       });
       
-      // Update power-ups
+      // Update power-ups with proper speed
       this.powerUps.forEach(powerUp => {
         powerUp.update(deltaTime, player.velocityX);
       });
@@ -599,12 +570,12 @@ export default class ObstacleManager {
         console.log(`SCORE CHANGED: from ${initialScore} to ${player.score} (diff: ${player.score - initialScore})`);
       }
       
-      // Return score result if we have one, otherwise power-up result
+      // Return score result if we have one, otherwise check powerup collisions
       if (scoreResult) {
         return scoreResult;
       }
       
-      // Explicitly check power-ups but don't add score through this path
+      // Check powerup collisions
       return this.checkPowerUpCollisionsWithoutScoring(player);
     } catch (err) {
       console.error('Error in ObstacleManager.update:', err);
@@ -997,7 +968,6 @@ export default class ObstacleManager {
       this.totalGameTime = 0;
       this.lastSpeedIncreaseTime = 0;
       this.timeSinceLastObstacle = 0;
-      this.timeSinceLastPowerUp = 0;
       this.spawnActive = false;
       this.gameSpeed = 200; // Reset game speed
       this.lastObstacleType = null;
@@ -1005,9 +975,9 @@ export default class ObstacleManager {
       this.totalDistance = 0;
       this.firstObstacleSpawned = false;
       this.obstacleCountInEasyMode = 0;
-      this.powerUpsInLastMinute = 0;
-      this.guaranteedPowerUpTimer = 0;
-      this.lastMinuteResetTime = 0;
+      
+      // Reset powerup system completely
+      this.resetPowerUpSystem();
       
       // Reset jump tracking
       this.currentJumpId = 0;
@@ -1015,89 +985,238 @@ export default class ObstacleManager {
       this.playerWasJumping = false;
       this.pointsAwardedThisJump = false;
       
-      console.log('Obstacle manager reset');
+      console.log('Obstacle manager fully reset, including powerup system');
     } catch (err) {
       console.error('Error in ObstacleManager.reset:', err);
     }
   }
   
-  // Check if we can spawn a power-up based on time and spacing
-  canSpawnPowerUp(): boolean {
+  /**
+   * Complete reset of the powerup system
+   * Resets all relevant state for powerup generation
+   */
+  resetPowerUpSystem() {
     try {
-      // Don't spawn if we just started the game
-      if (this.totalGameTime < 2000) return false; // Reduced from 4000 to 2000
+      this.powerUps = [];
       
-      // Don't spawn power-ups too frequently unless we need to guarantee one
-      if (this.timeSinceLastPowerUp < this.powerUpSpawnRate && this.guaranteedPowerUpTimer < 10000) return false; // Reduced from 15000 to 10000
+      // Start with a negative timer to enforce initial delay
+      this.timeSinceLastPowerUp = -(this.powerUpInitialDelay * 2); // Extended initial delay
+      this.powerUpSystemReady = false;
+      this.earlyPowerUpCount = 0;
+      this.powerUpsInLastMinute = 0;
+      this.lastMinuteResetTime = 0;
       
-      // Don't spawn more than the maximum per minute
-      if (this.powerUpsInLastMinute >= this.maxPowerUpsPerMinute) return false;
+      // Hard reset all power-up position tracking
+      this.lastPowerUpXPosition = 0;
       
-      // Random factor for variability in spawn times (reduced randomness to be more predictable)
-      const randomFactor = 0.9 + Math.random() * 0.2; // 90% to 110% randomness
+      // Configure balanced power-up frequency
+      this.powerUpSpawnChance = 0.65; // Lower base chance (was 0.7)
+      this.maxPowerUpsPerMinute = 5; // Further reduced from 6
+      this.minPowerUpSpacing = 3000; // Significantly increased minimum spacing (was 1200)
+      this.minSpatialDistance = 500; // Increased minimum spatial distance (was 350)
       
-      // Allow power-ups to spawn after appropriate delay or when guaranteed
-      return this.timeSinceLastPowerUp >= (this.powerUpSpawnRate * randomFactor) || this.guaranteedPowerUpTimer >= 12000; // Reduced from 20000 to 12000
+      // Eliminate consecutive spawning completely
+      this.consecutivePowerupChance = 0;
+      this.isInConsecutiveSpawn = false;
+      
+      console.log("Power-up system reset with strict anti-clustering controls");
     } catch (err) {
-      console.error('Error in ObstacleManager.canSpawnPowerUp:', err);
-      return false;
+      console.error('Error in ObstacleManager.resetPowerUpSystem:', err);
     }
   }
   
-  // Create a random power-up
-  createRandomPowerUp(): PowerUp {
+  /**
+   * Update method for powerup system - should be called from the main update
+   * Handles all powerup timing, spawning decisions, and state updates
+   */
+  updatePowerUpSystem(delta: number, gameTime: number) {
     try {
-      // Possible trick types
-      const trickTypes: TrickType[] = ['kickflip', '360flip', 'heelflip'];
+      // Update time tracking
+      this.timeSinceLastPowerUp += delta;
       
-      // Randomly select a trick type
-      const randomType = trickTypes[Math.floor(Math.random() * trickTypes.length)];
-      
-      // Calculate position - ensure power-ups are well-spaced
-      let x = 1000 + Math.random() * 200; // Base position
-      
-      // Add extra spacing in early game to prevent clumping
-      if (this.totalGameTime < this.easyModeTimer * 2) {
-        x += 200; // Reduced from 300 to 200 to allow more power-ups to appear
+      // Only initialize the minute counter when system is ready
+      if (this.lastMinuteResetTime === 0 && this.powerUpSystemReady) {
+        this.lastMinuteResetTime = gameTime;
       }
       
-      // If we have existing power-ups, make sure we're far enough away from the last one
-      if (this.powerUps.length > 0) {
-        const lastPowerUp = this.powerUps[this.powerUps.length - 1];
-        const minSpacing = 300; // Reduced from 400 to 300
+      // Reset per-minute counter
+      if (gameTime - this.lastMinuteResetTime >= 60000) {
+        this.powerUpsInLastMinute = 0;
+        this.lastMinuteResetTime = gameTime;
+        console.log("Power-up minute counter reset");
+      }
+      
+      // Mark system as ready once initial delay has passed
+      if (!this.powerUpSystemReady && this.timeSinceLastPowerUp >= 0) {
+        this.powerUpSystemReady = true;
+        console.log("Power-up system ready after initial delay");
+        return; // Return immediately after becoming ready (no instant spawn)
+      }
+      
+      // PRIMARY CONTROL GATES
+      // These gates must ALL pass for any spawn to occur
+      
+      // Gate 1: System must be ready
+      if (!this.powerUpSystemReady) return;
+      
+      // Gate 2: Must not exceed maximum per minute
+      if (this.powerUpsInLastMinute >= this.maxPowerUpsPerMinute) return;
+      
+      // Gate 3: Early game restrictions
+      const isEarlyGame = gameTime < this.easyModeTimer;
+      const isVeryEarlyGame = gameTime < this.easyModeTimer / 2;
+      
+      if (isEarlyGame && this.earlyPowerUpCount >= (isVeryEarlyGame ? 1 : 2)) {
+        return;
+      }
+      
+      // Gate 4: Minimum time spacing requirement (absolute)
+      // Scale based on game progression
+      let minTimeSpacing;
+      if (isVeryEarlyGame) {
+        minTimeSpacing = this.minPowerUpSpacing * 3; // First 10 seconds: very sparse
+      } else if (isEarlyGame) {
+        minTimeSpacing = this.minPowerUpSpacing * 2; // 10-20 seconds: sparse
+      } else if (gameTime < 60000) {
+        minTimeSpacing = this.minPowerUpSpacing * 1.5; // 20-60 seconds: moderately spaced
+      } else {
+        minTimeSpacing = this.minPowerUpSpacing; // After 60 seconds: baseline spacing
+      }
+      
+      // INVARIANT: Never spawn before minimum time has passed
+      if (this.timeSinceLastPowerUp < minTimeSpacing) {
+        return;
+      }
+      
+      // Gate 5: Check if any powerups are still on screen
+      // Prevent clustering by ensuring previous powerups are collected or off-screen
+      const visiblePowerUps = this.powerUps.filter(p => 
+        p.x < 1200 && p.x > this.cameraOffset - 100);
+      
+      // If there are visible powerups, drastically reduce chance of new spawn
+      let spawnChanceMultiplier = 1.0;
+      if (visiblePowerUps.length > 0) {
+        // With each visible powerup, reduce chance dramatically
+        spawnChanceMultiplier = Math.pow(0.2, visiblePowerUps.length);
         
-        if (x - lastPowerUp.x < minSpacing) {
-          x = lastPowerUp.x + minSpacing + Math.random() * 100; // Ensure minimum spacing (reduced from 200 to 100)
+        // If 2+ powerups visible, almost never spawn
+        if (visiblePowerUps.length >= 2) return;
+      }
+      
+      // SPAWN DECISION LOGIC
+      // Only one path to spawning with consistent rules
+      
+      // Base chance that gradually increases over time since last spawn
+      const baseChance = this.powerUpSpawnChance;
+      const timeOverMinimum = this.timeSinceLastPowerUp - minTimeSpacing;
+      
+      // Calculate extra chance but very gradually
+      let extraChance = 0;
+      if (timeOverMinimum > 0) {
+        extraChance = Math.min(0.15, timeOverMinimum / 20000); // Very slow ramp up
+      }
+      
+      // Calculate final spawn chance with all factors
+      const finalChance = Math.min(0.75, baseChance + extraChance) * spawnChanceMultiplier;
+      
+      // Guaranteed spawn as an absolute fallback, but with a very long timer
+      // This ensures players eventually get a powerup no matter what
+      const guaranteedTimer = 30000; // 30 seconds absolute maximum
+      
+      if (this.timeSinceLastPowerUp > guaranteedTimer) {
+        // Only spawn if no powerups are currently visible and we're not in very early game
+        if (visiblePowerUps.length === 0 && !isVeryEarlyGame) {
+          console.log(`Guaranteed power-up spawn after ${guaranteedTimer/1000}s`);
+          this.spawnPowerUp();
+        }
+        return;
+      }
+      
+      // Normal random spawn chance
+      if (Math.random() < finalChance) {
+        this.spawnPowerUp();
+      }
+    } catch (err) {
+      console.error('Error in ObstacleManager.updatePowerUpSystem:', err);
+    }
+  }
+  
+  /**
+   * Create and spawn a new powerup
+   */
+  spawnPowerUp() {
+    try {
+      // Calculate position
+      const screenWidth = 800;
+      let spawnX = screenWidth + this.cameraOffset + 200; // Further off-screen (was +100)
+      
+      // Calculate height with middle bias
+      let height;
+      const heightRoll = Math.random();
+      
+      if (heightRoll < 0.2) { // 20% chance for low powerup
+        height = this.powerUpMinHeight + Math.random() * 50;
+      } else if (heightRoll < 0.9) { // 70% chance for middle range
+        height = this.powerUpMinHeight + 50 + Math.random() * 100;
+      } else { // 10% chance for high powerup
+        height = this.powerUpMaxHeight - 50 + Math.random() * 50;
+      }
+      
+      // ENSURE PROPER SPATIAL DISTRIBUTION
+      if (this.lastPowerUpXPosition > 0) {
+        // Calculate minimum distance based on game time
+        let distanceFactor;
+        
+        if (this.totalGameTime < 10000) { // First 10 seconds
+          distanceFactor = 4.0; // Even stricter in very early game
+        } else if (this.totalGameTime < 20000) { // 10-20 seconds
+          distanceFactor = 3.0; // Stricter in early game
+        } else if (this.totalGameTime < 40000) { // 20-40 seconds
+          distanceFactor = 2.0; // Strict in mid-early game
+        } else {
+          distanceFactor = 1.5; // Always maintain 1.5x spacing minimum
+        }
+        
+        const requiredDistance = this.minSpatialDistance * distanceFactor;
+        
+        // ENFORCE strict minimum distance
+        if (spawnX - this.lastPowerUpXPosition < requiredDistance) {
+          spawnX = this.lastPowerUpXPosition + requiredDistance;
+          console.log(`Adjusted power-up position to maintain ${requiredDistance}px distance`);
         }
       }
       
-      // Random height between min and max
-      const y = this.groundY - this.powerUpMaxHeight + Math.random() * (this.powerUpMaxHeight - this.powerUpMinHeight);
-      
       // Create the power-up
       const powerUp = new PowerUp({
-        x,
-        y,
-        type: randomType
+        x: spawnX, 
+        y: this.groundY - height,
+        type: this.getRandomTrickType()
       });
       
-      // Add to power-ups array
+      // Add to active power-ups
       this.powerUps.push(powerUp);
       
-      console.log(`Created power-up: ${randomType} at (${x}, ${y})`);
+      // Update tracking variables
+      this.lastPowerUpXPosition = spawnX;
+      this.timeSinceLastPowerUp = 0;
+      this.powerUpsInLastMinute++;
       
-      return powerUp;
+      // Update early game counter if applicable
+      if (this.totalGameTime < this.easyModeTimer) {
+        this.earlyPowerUpCount++;
+      }
+      
+      // Debug logging
+      console.log(`Power-up spawned at ${Math.round(this.totalGameTime/1000)}s, X=${Math.round(spawnX)}, Total: ${this.powerUpsInLastMinute}/${this.maxPowerUpsPerMinute} this minute`);
     } catch (err) {
-      console.error('Error in ObstacleManager.createRandomPowerUp:', err);
-      // Return a default power-up as fallback
-      const fallbackPowerUp = new PowerUp({
-        x: 1000,
-        y: this.groundY - 150,
-        type: 'kickflip'
-      });
-      this.powerUps.push(fallbackPowerUp);
-      return fallbackPowerUp;
+      console.error('Error in ObstacleManager.spawnPowerUp:', err);
     }
+  }
+  
+  // Helper method to get a random trick type
+  private getRandomTrickType(): TrickType {
+    const trickTypes: TrickType[] = ['kickflip', '360flip', 'heelflip'];
+    return trickTypes[Math.floor(Math.random() * trickTypes.length)];
   }
   
   // Version that doesn't award score for power-ups to avoid double scoring

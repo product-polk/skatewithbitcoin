@@ -593,6 +593,10 @@ export const Canvas: React.FC<GameProps> = ({
             
             // Clear and reset obstacles
             obstacleManager.reset();
+            
+            // Explicitly reset the powerup system for reliable respawning
+            obstacleManager.resetPowerUpSystem();
+            
             cameraOffsetRef.current = 0;
             
             // Resume background music if sound is enabled
