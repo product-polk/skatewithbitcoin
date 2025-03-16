@@ -852,11 +852,98 @@ export const Canvas: React.FC<GameProps> = ({
             ctx.stroke();
           }
           
+          // Draw road markings to enhance the sense of motion
+          if (!player.crashed) {
+            // Draw street markings (dashed line)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            
+            // Road center line (dashed)
+            const dashLength = 50;
+            const gapLength = 30;
+            const totalLength = dashLength + gapLength;
+            const startOffset = -cameraOffsetRef.current % totalLength;
+            
+            for (let x = startOffset; x < canvas.width + dashLength; x += totalLength) {
+              ctx.fillRect(x, 395, dashLength, 5);
+            }
+            
+            // Draw small road debris/particles for added motion sense
+            if (player.speed > 50) {
+              // Only draw particles when moving at decent speed
+              const particleCount = Math.floor(player.speed / 50); // More particles at higher speeds
+              
+              ctx.fillStyle = 'rgba(150, 150, 150, 0.5)';
+              for (let i = 0; i < particleCount; i++) {
+                const particleX = (Math.random() * canvas.width * 0.7) + (canvas.width * 0.3);
+                const particleY = 396 + Math.random() * 8;
+                const particleSize = 1 + Math.random() * 3;
+                
+                // Make particles move faster as they're closer to player
+                const particleSpeed = (canvas.width - particleX) / 10;
+                const adjustedX = (particleX - (cameraOffsetRef.current * (particleSpeed / 10))) % canvas.width;
+                
+                ctx.fillRect(adjustedX, particleY, particleSize, particleSize);
+              }
+            }
+          }
+          
           // Draw obstacles
           obstacleManager.draw(ctx);
           
-          // Draw player with camera offset
-          player.draw(ctx, cameraOffsetRef.current);
+          // Draw player with camera offset and tilt based on acceleration
+          // Modify the player draw call to include tilt
+          if (player && inputManager) {
+            // Calculate tilt based on acceleration/deceleration
+            let tilt = 0;
+            if (inputManager.isPressed('left')) {
+              // Tilting backward when slowing down
+              tilt = -0.1; 
+            } else if (inputManager.isPressed('right')) {
+              // Tilting forward when speeding up
+              tilt = 0.1;
+            }
+            
+            // Store the original context state
+            ctx.save();
+            
+            // Move to player position
+            const playerScreenX = player.x - cameraOffsetRef.current;
+            const playerScreenY = player.y;
+            
+            // Apply rotation around player center
+            ctx.translate(playerScreenX + player.width / 2, playerScreenY + player.height / 2);
+            ctx.rotate(tilt);
+            ctx.translate(-(playerScreenX + player.width / 2), -(playerScreenY + player.height / 2));
+            
+            // Draw player
+            player.draw(ctx, cameraOffsetRef.current);
+            
+            // Restore context to original state
+            ctx.restore();
+            
+            // Add speed lines when moving fast
+            if (player.speed > 150 && !player.crashed) {
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+              ctx.lineWidth = 2;
+              
+              const lineCount = Math.min(Math.floor(player.speed / 50), 6);
+              const playerCenterX = player.x - cameraOffsetRef.current;
+              const playerCenterY = player.y + player.height / 2;
+              
+              for (let i = 0; i < lineCount; i++) {
+                const lineLength = 20 + (Math.random() * 40);
+                const yOffset = -10 + (Math.random() * 20);
+                
+                ctx.beginPath();
+                ctx.moveTo(playerCenterX - 10, playerCenterY + yOffset);
+                ctx.lineTo(playerCenterX - 10 - lineLength, playerCenterY + yOffset);
+                ctx.stroke();
+              }
+            }
+          } else {
+            // Original player draw if the modified drawing fails
+            player.draw(ctx, cameraOffsetRef.current);
+          }
           
           // Draw floating score indicators
           floatingScoresRef.current.forEach(indicator => {
@@ -1099,14 +1186,11 @@ export const Canvas: React.FC<GameProps> = ({
     showHighScores();
   }, [showHighScores]);
 
-  // IMPORTANT: Add a forced mobile mode that can be toggled
+  // Keep the forced mobile mode toggle for testing
   const [forceMobileMode, setForceMobileMode] = useState<boolean>(false);
   
-  // Function to detect mobile devices more reliably
-  const detectMobileDevice = (): boolean => {
-    // Force mobile mode if set
-    if (forceMobileMode) return true;
-    
+  // Function to detect mobile devices
+  const detectMobileDevice = useCallback((): boolean => {
     // Check if window is defined (for SSR)
     if (typeof window === 'undefined') return false;
     
@@ -1124,82 +1208,57 @@ export const Canvas: React.FC<GameProps> = ({
     // Also consider screen width
     const smallScreenCheck = window.innerWidth <= 768;
     
-    console.log('Mobile detection:', { userAgentCheck, smallScreenCheck, forceMobileMode });
-    
     return userAgentCheck || smallScreenCheck;
-  };
+  }, []);
 
-  // Detect mobile device and orientation on component mount
+  // Detect mobile device on component mount
   useEffect(() => {
-    // Check if we're on a mobile device
-    const checkMobile = () => {
-      const isMobileDevice = detectMobileDevice();
-      console.log('Mobile detection result:', isMobileDevice);
-      setIsMobile(isMobileDevice);
-      
-      // Check orientation
-      const isPortraitMode = window.innerHeight > window.innerWidth;
-      setIsPortrait(isPortraitMode);
-      
-      // Only show orientation prompt on mobile in portrait mode - modified to be less strict
-      const shouldShowOrientationPrompt = isMobileDevice && isPortraitMode && window.innerWidth < 500;
-      setShowOrientationPrompt(shouldShowOrientationPrompt);
-      
-      // Mobile devices should always have touch controls - regardless of orientation
-      setTouchControlsVisible(isMobileDevice);
-      
-      console.log(`Device detection: Mobile: ${isMobileDevice}, Portrait: ${isPortraitMode}, Touch: ${isMobileDevice}, ShowPrompt: ${shouldShowOrientationPrompt}`);
+    const mobileDevice = detectMobileDevice();
+    setIsMobile(mobileDevice);
+    
+    // Also check on resize
+    const handleResize = () => {
+      setIsMobile(detectMobileDevice());
     };
     
-    // Run check initially
-    checkMobile();
-    
-    // Add event listeners for orientation and resize changes
-    window.addEventListener('resize', checkMobile);
-    window.addEventListener('orientationchange', checkMobile);
-    
-    // Set a 3 second check to ensure mobile controls are visible
-    const controlCheckTimer = setTimeout(() => {
-      if (!isMobile && window.innerWidth <= 768) {
-        console.log('Forcing mobile mode due to small screen size');
-        setForceMobileMode(true);
-        setIsMobile(true);
-        setTouchControlsVisible(true);
-      }
-    }, 3000);
-    
-    return () => {
-      window.removeEventListener('resize', checkMobile);
-      window.removeEventListener('orientationchange', checkMobile);
-      clearTimeout(controlCheckTimer);
-    };
-  }, [forceMobileMode]);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [detectMobileDevice]);
 
-  return (
-    <div className="fixed inset-0 flex flex-col bg-black overflow-hidden">
-      {/* Mobile Debug Panel - always visible */}
-      <div className="absolute top-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-1 z-50">
-        <div>Mobile: {isMobile ? '✅' : '❌'} | Controls: {touchControlsVisible ? '✅' : '❌'} | Portrait: {isPortrait ? '✅' : '❌'}</div>
-        <div>
-          <button 
-            onClick={() => {
-              setForceMobileMode(!forceMobileMode);
-              console.log('Force mobile mode toggled:', !forceMobileMode);
-            }}
-            style={{
-              backgroundColor: forceMobileMode ? 'green' : 'red',
-              color: 'white',
-              padding: '2px 4px',
-              fontSize: '10px',
-              borderRadius: '4px'
-            }}
+  // If mobile device detected, render only the mobile message
+  if (isMobile) {
+    return (
+      <div className="fixed inset-0 bg-black flex flex-col items-center justify-center text-center px-4">
+        <div className="mb-6">
+          <span style={{ fontSize: '64px' }}>💻</span>
+        </div>
+        <h1 className="text-white text-2xl font-bold mb-4">Desktop Only Experience</h1>
+        <p className="text-gray-300 mb-6 max-w-md">
+          Skate with Bitcoin is currently only available on desktop devices.
+          <br /><br />
+          Please visit this site on a desktop computer to play the game.
+        </p>
+        <div className="mt-2">
+          <a 
+            href="https://x.com/jas_jaski" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-500 font-bold hover:text-blue-400 transition-colors"
           >
-            {forceMobileMode ? 'Mobile Mode ON' : 'Mobile Mode OFF'}
-          </button>
+            Follow @jas_jaski for updates
+          </a>
+        </div>
+        <div className="absolute bottom-4 left-0 right-0 text-center text-white text-sm opacity-70">
+          Built with ♥︎ for ₿itcoin
         </div>
       </div>
+    );
+  }
 
-      {/* Main game container - takes all space, including area for controls */}
+  // Desktop implementation - only rendered on desktop devices
+  return (
+    <div className="fixed inset-0 flex flex-col bg-black overflow-hidden">
+      {/* Main game container */}
       <div className="flex-grow relative w-full flex items-center justify-center bg-black overflow-hidden">
         <canvas
           ref={canvasRef}
@@ -1208,55 +1267,8 @@ export const Canvas: React.FC<GameProps> = ({
           height={height}
         />
         
-        {/* Mobile orientation prompt - only shown on mobile in portrait mode */}
-        {showOrientationPrompt && (
-          <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-6 text-center">
-            <div 
-              style={{
-                backgroundColor: 'rgba(0,0,0,0.85)',
-                borderRadius: '16px',
-                padding: '32px',
-                maxWidth: '90%',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 0 2px rgba(255,255,255,0.1) inset',
-                backdropFilter: 'blur(5px)',
-                border: '1px solid rgba(255,255,255,0.1)'
-              }}
-            >
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📱↔️</div>
-              <h2 
-                style={{
-                  fontSize: '24px',
-                  fontWeight: 'bold',
-                  color: 'white',
-                  marginBottom: '16px'
-                }}
-              >
-                Please Rotate Your Device
-              </h2>
-              <p 
-                style={{
-                  fontSize: '16px',
-                  color: 'rgba(255,255,255,0.8)',
-                  marginBottom: '24px',
-                  lineHeight: '1.5'
-                }}
-              >
-                Skate with Bitcoin works best in landscape mode.<br/>
-                Please rotate your device to play the game.
-              </p>
-              <div className="animate-pulse" style={{ marginTop: '20px' }}>
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ margin: '0 auto' }}>
-                  <path d="M16 10L12 14L8 10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M3 5H7V21H3V5Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M17 5H21V21H17V5Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-            </div>
-          </div>
-        )}
-        
         {/* Start instruction - shown when game hasn't started */}
-        {!gameStarted && !showOrientationPrompt && (
+        {!gameStarted && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div 
               style={{
@@ -1271,7 +1283,7 @@ export const Canvas: React.FC<GameProps> = ({
             >
               <h1 
                 style={{
-                  fontSize: isMobile ? '32px' : '42px',
+                  fontSize: '42px',
                   fontWeight: 'bold',
                   color: 'white',
                   marginBottom: '24px',
@@ -1283,14 +1295,14 @@ export const Canvas: React.FC<GameProps> = ({
               </h1>
               <p 
                 style={{
-                  fontSize: isMobile ? '16px' : '18px',
+                  fontSize: '18px',
                   color: 'white',
                   marginBottom: '32px',
                   textAlign: 'center',
                   opacity: '0.9'
                 }}
               >
-                {isMobile ? 'Tap the Start Game button to begin' : 'Press SPACE or click Start Game to begin'}
+                Press SPACE or click Start Game to begin
               </p>
               <div 
                 style={{
@@ -1302,207 +1314,58 @@ export const Canvas: React.FC<GameProps> = ({
               >
                 <p 
                   style={{
-                    fontSize: isMobile ? '12px' : '14px',
+                    fontSize: '14px',
                     color: 'white',
                     opacity: '0.8',
                     textAlign: 'center'
                   }}
                 >
-                  {isMobile ? (
-                    <>Tap <strong>Jump</strong> to jump | Tap <strong>←/→</strong> to control speed<br/>
-                    Tap <strong>Stunt</strong> to use power-ups (when available)</>
-                  ) : (
-                    <><span style={{ fontWeight: 'bold' }}>SPACE/UP</span> = Jump | <span style={{ fontWeight: 'bold' }}>LEFT/RIGHT</span> = Control Speed<br/>
-                    <span style={{ fontWeight: 'bold' }}>ANY KEY (except SPACE)</span> = Use power-ups (when available)</>
-                  )}
+                  <span style={{ fontWeight: 'bold' }}>SPACE/UP</span> = Jump | <span style={{ fontWeight: 'bold' }}>LEFT/RIGHT</span> = Control Speed<br/>
+                  <span style={{ fontWeight: 'bold' }}>ANY KEY (except SPACE)</span> = Use power-ups (when available)
                 </p>
               </div>
             </div>
           </div>
         )}
         
-        {/* MODIFIED: Mobile-specific Start Game button - large and centered - SHOW ON ALL SMALL SCREENS */}
-        {!gameStarted && (isMobile || window.innerWidth <= 768) && (
-          <div className="absolute inset-0 flex items-center justify-center z-50">
+        {/* Start Game button */}
+        {!gameStarted && (
+          <div className="absolute bottom-16 left-0 right-0 flex justify-center">
             <button 
               onClick={handleStartGame}
               style={{
-                backgroundColor: 'rgba(22, 163, 74, 0.9)',
+                backgroundColor: 'rgba(22, 163, 74, 0.85)',
                 color: 'white',
-                padding: '24px 40px',
-                borderRadius: '12px',
-                fontSize: '28px',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontSize: '16px',
                 fontWeight: 'bold',
-                border: '3px solid rgba(255,255,255,0.3)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-                animation: 'pulse 1.5s infinite',
-                width: '80%',
-                maxWidth: '300px'
+                backdropFilter: 'blur(4px)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                opacity: '0.95'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
+                e.currentTarget.style.backgroundColor = 'rgba(21, 128, 61, 0.85)';
+                e.currentTarget.style.opacity = '1';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+                e.currentTarget.style.backgroundColor = 'rgba(22, 163, 74, 0.85)';
+                e.currentTarget.style.opacity = '0.95';
               }}
             >
-              TAP TO START
-            </button>
-          </div>
-        )}
-        
-        {/* MODIFIED: Mobile touch controls - now visible on all mobile devices regardless of other states */}
-        {(isMobile || window.innerWidth <= 768) && gameStarted && !playerRef.current?.crashed && (
-          <div className="absolute bottom-16 left-0 right-0 flex justify-between px-4 z-50">
-            {/* Left side controls - movement */}
-            <div className="flex gap-2">
-              <button
-                onTouchStart={() => {
-                  if (inputManagerRef.current) {
-                    // Use keydown/keyup directly instead of setKeyState
-                    const event = new KeyboardEvent('keydown', { code: 'ArrowLeft', key: 'ArrowLeft' });
-                    document.dispatchEvent(event);
-                  }
-                }}
-                onTouchEnd={() => {
-                  if (inputManagerRef.current) {
-                    const event = new KeyboardEvent('keyup', { code: 'ArrowLeft', key: 'ArrowLeft' });
-                    document.dispatchEvent(event);
-                  }
-                }}
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(0,0,0,0.6)',
-                  color: 'white',
-                  fontSize: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-                }}
-              >
-                ←
-              </button>
-              <button
-                onTouchStart={() => {
-                  if (inputManagerRef.current) {
-                    const event = new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight' });
-                    document.dispatchEvent(event);
-                  }
-                }}
-                onTouchEnd={() => {
-                  if (inputManagerRef.current) {
-                    const event = new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight' });
-                    document.dispatchEvent(event);
-                  }
-                }}
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(0,0,0,0.6)',
-                  color: 'white',
-                  fontSize: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-                }}
-              >
-                →
-              </button>
-            </div>
-            
-            {/* Right side controls - jump and tricks */}
-            <div className="flex gap-2">
-              <button
-                onTouchStart={() => {
-                  if (inputManagerRef.current) {
-                    // Any key except Space to perform a trick
-                    const event = new KeyboardEvent('keydown', { code: 'KeyT', key: 't' });
-                    document.dispatchEvent(event);
-                  }
-                }}
-                onTouchEnd={() => {
-                  if (inputManagerRef.current) {
-                    const event = new KeyboardEvent('keyup', { code: 'KeyT', key: 't' });
-                    document.dispatchEvent(event);
-                  }
-                }}
-                style={{
-                  width: '80px',
-                  height: '60px',
-                  borderRadius: '30px',
-                  backgroundColor: 'rgba(79, 70, 229, 0.8)',
-                  color: 'white',
-                  fontSize: '16px',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-                }}
-              >
-                STUNT
-              </button>
-              <button
-                onTouchStart={() => {
-                  if (inputManagerRef.current) {
-                    const event = new KeyboardEvent('keydown', { code: 'Space', key: ' ' });
-                    document.dispatchEvent(event);
-                  }
-                }}
-                onTouchEnd={() => {
-                  if (inputManagerRef.current) {
-                    const event = new KeyboardEvent('keyup', { code: 'Space', key: ' ' });
-                    document.dispatchEvent(event);
-                  }
-                }}
-                style={{
-                  width: '80px',
-                  height: '60px',
-                  borderRadius: '30px',
-                  backgroundColor: 'rgba(22, 163, 74, 0.8)',
-                  color: 'white',
-                  fontSize: '16px',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-                }}
-              >
-                JUMP
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* MODIFIED: Restart button for mobile when crashed - large centered restart button */}
-        {playerRef.current?.crashed && (isMobile || window.innerWidth <= 768) && !isHighScoresOpen && (
-          <div className="absolute inset-0 flex items-center justify-center z-50">
-            <button
-              onClick={handleRestartGame}
-              style={{
-                backgroundColor: 'rgba(22, 163, 74, 0.9)',
-                color: 'white',
-                padding: '20px 40px',
-                borderRadius: '12px',
-                fontSize: '28px',
-                fontWeight: 'bold',
-                border: '3px solid rgba(255,255,255,0.5)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-                animation: 'pulse 1.5s infinite',
-                width: '80%',
-                maxWidth: '300px'
-              }}
-            >
-              TAP TO RESTART
+              Start Game
             </button>
           </div>
         )}
 
-        {/* Footer bar with attribution and buttons - now positioned absolutely to avoid layout shifts */}
+        {/* Footer bar - always visible */}
         <div 
           style={{
             position: 'absolute',
@@ -1510,7 +1373,7 @@ export const Canvas: React.FC<GameProps> = ({
             left: '0',
             right: '0',
             backgroundColor: 'rgba(30, 30, 30, 0.85)',
-            padding: isMobile ? '8px' : '12px',
+            padding: '12px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -1518,32 +1381,28 @@ export const Canvas: React.FC<GameProps> = ({
             boxShadow: '0 -2px 10px rgba(0,0,0,0.3)'
           }}
         >
-          {/* Attribution message - hide text on mobile, just show link */}
+          {/* Attribution message */}
           <div 
             style={{
               color: 'white',
               fontWeight: 'bold',
-              fontSize: isMobile ? '14px' : '16px'
+              fontSize: '16px'
             }}
           >
-            {isMobile ? (
-              <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a>
-            ) : (
-              <>Built with ♥︎ for ₿itcoin. Follow <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a></>
-            )}
+            Built with ♥︎ for ₿itcoin. Follow <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a>
           </div>
           
           {/* Game control buttons */}
-          <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px' }}>
+          <div style={{ display: 'flex', gap: '10px' }}>
             {/* Sound Toggle Button */}
             <button
               onClick={toggleSound}
               style={{
                 backgroundColor: soundEnabled ? 'rgba(55, 65, 81, 0.85)' : 'rgba(239, 68, 68, 0.85)',
                 color: 'white',
-                padding: isMobile ? '6px 10px' : '8px 14px',
+                padding: '8px 14px',
                 borderRadius: '8px',
-                fontSize: isMobile ? '12px' : '14px',
+                fontSize: '14px',
                 fontWeight: 'bold',
                 backdropFilter: 'blur(4px)',
                 border: '1px solid rgba(255,255,255,0.1)',
@@ -1564,7 +1423,7 @@ export const Canvas: React.FC<GameProps> = ({
                 e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
               }}
             >
-              {isMobile ? (soundEnabled ? '🔊' : '🔇') : (soundEnabled ? '🔊 Sound On' : '🔇 Sound Off')}
+              {soundEnabled ? '🔊 Sound On' : '🔇 Sound Off'}
             </button>
             
             {/* High Scores Button */}
@@ -1574,9 +1433,9 @@ export const Canvas: React.FC<GameProps> = ({
               style={{
                 backgroundColor: 'rgba(59, 130, 246, 0.85)',
                 color: 'white',
-                padding: isMobile ? '6px 10px' : '8px 14px',
+                padding: '8px 14px',
                 borderRadius: '8px',
-                fontSize: isMobile ? '12px' : '14px',
+                fontSize: '14px',
                 fontWeight: 'bold',
                 backdropFilter: 'blur(4px)',
                 border: '1px solid rgba(255,255,255,0.1)',
@@ -1600,7 +1459,7 @@ export const Canvas: React.FC<GameProps> = ({
                 e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.85)';
               }}
             >
-              {isMobile ? '📊' : '📊 Leaderboard'}
+              📊 Leaderboard
             </button>
           </div>
         </div>

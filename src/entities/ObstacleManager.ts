@@ -75,15 +75,15 @@ function getRandomBitcoinImage(): string {
 }
 
 // Function to load an obstacle image if not already loaded
-function getObstacleImage(type: ObstacleType): HTMLImageElement {
+function getObstacleImage(type: ObstacleType): { image: HTMLImageElement, name: string } {
   // Generate a unique key for this obstacle instance
   const imageKey = `${type}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   
   // Create new image
   const img = new Image();
   
-  // Improve image rendering quality
-  img.style.imageRendering = 'auto';
+  // Improve image rendering quality for crisp display during movement
+  img.style.imageRendering = 'crisp-edges';
   
   // Enable crossOrigin to avoid CORS issues when processing
   img.crossOrigin = 'anonymous';
@@ -94,6 +94,7 @@ function getObstacleImage(type: ObstacleType): HTMLImageElement {
   // Track load attempts for fallback chain
   let loadAttempt = 0;
   const maxAttempts = 2; // Reduced from 3 to 2 (removing the old obstacle fallback)
+  let currentImageName = bitcoinImage;
   
   // Define our image loading function to handle retries
   const attemptImageLoad = () => {
@@ -102,11 +103,13 @@ function getObstacleImage(type: ObstacleType): HTMLImageElement {
     if (loadAttempt === 1) {
       // First attempt: use Bitcoin image from Obstacles folder
       img.src = `/images/Obstacles/${bitcoinImage}`;
+      currentImageName = bitcoinImage;
     } else {
       // Second and final attempt: try Bitcoin fallback images
       const fallbackImage = fallbackObstacleImages[Math.floor(Math.random() * fallbackObstacleImages.length)];
       console.log(`Trying fallback Bitcoin image: ${fallbackImage}`);
       img.src = `/images/${fallbackImage}`;
+      currentImageName = fallbackImage;
     }
   };
   
@@ -130,7 +133,7 @@ function getObstacleImage(type: ObstacleType): HTMLImageElement {
     }
   };
   
-  return img;
+  return { image: img, name: currentImageName };
 }
 
 // Base obstacle class
@@ -145,6 +148,7 @@ export class Obstacle {
   stackParent: Obstacle | null = null; // Add this property to track if an obstacle is stacked
   image: HTMLImageElement;
   imageLoaded: boolean = false;
+  imageName: string = ''; // Store the name of the image for labeling
   
   constructor(x: number, y: number, width: number, height: number, type: ObstacleType) {
     this.x = x;
@@ -154,7 +158,9 @@ export class Obstacle {
     this.type = type;
     
     // Load a random Bitcoin-themed image for this obstacle
-    this.image = getObstacleImage(type);
+    const imageResult = getObstacleImage(type);
+    this.image = imageResult.image;
+    this.imageName = imageResult.name;
     
     // Check if image is already loaded
     if (this.image.complete) {
@@ -226,12 +232,12 @@ export class Obstacle {
           ctx.globalAlpha = 0.5;
         }
         
-        // Draw a background box for the obstacle - increased opacity from 0.85 to 0.95
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        // Draw a background box for the obstacle - solid white for better contrast
+        ctx.fillStyle = 'rgba(255, 255, 255, 1.0)';
         
         // Add a subtle shadow for depth and better visibility
         ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-        ctx.shadowBlur = 5;
+        ctx.shadowBlur = 4;
         ctx.shadowOffsetY = 2;
         
         ctx.fillRect(
@@ -241,10 +247,10 @@ export class Obstacle {
           this.height
         );
         
-        // Create a more pronounced border
+        // Create a more subtle border
         ctx.shadowBlur = 0; // Remove shadow for border
-        ctx.strokeStyle = 'rgba(255, 165, 0, 0.9)'; // Increased orange border opacity from 0.8 to 0.9
-        ctx.lineWidth = 2; // Increased from 1.5 to 2 for better visibility
+        ctx.strokeStyle = 'rgba(255, 140, 0, 0.8)'; // Orange border with slightly reduced opacity
+        ctx.lineWidth = 1.5; // Reduced from 3px to 1.5px
         ctx.strokeRect(
           drawX, 
           this.y, 
@@ -252,14 +258,14 @@ export class Obstacle {
           this.height
         );
         
-        // Calculate dimensions that preserve aspect ratio - increase scale slightly
+        // Calculate dimensions that preserve aspect ratio
         const originalWidth = this.image.width || 100;
         const originalHeight = this.image.height || 100;
         
-        // Calculate scaling factor while preserving aspect ratio - increased from 0.8 to 0.85
+        // Scale image to fit but leave room for the label
         let scale = Math.min(
-          (this.width * 0.85) / originalWidth,
-          (this.height * 0.85) / originalHeight
+          (this.width * 0.95) / originalWidth,
+          (this.height * 0.8) / originalHeight // Reduced slightly to leave room for label
         );
         
         // Calculate new dimensions
@@ -268,10 +274,15 @@ export class Obstacle {
         
         // Calculate centered position
         const centerX = drawX + (this.width - scaledWidth) / 2;
-        const centerY = this.y + (this.height - scaledHeight) / 2;
+        const centerY = this.y + (this.height * 0.45 - scaledHeight / 2); // Positioned higher to make room for label
         
         // Remove shadow for image drawing
         ctx.shadowColor = 'transparent';
+        
+        // Set image rendering to crisp-edges to reduce blur during movement
+        if (this.image.style) {
+          this.image.style.imageRendering = 'crisp-edges';
+        }
         
         // Boost contrast before drawing the image
         ctx.globalAlpha = this.hit ? 0.5 : 1.0;
@@ -284,6 +295,18 @@ export class Obstacle {
           scaledWidth,
           scaledHeight
         );
+        
+        // Add a label below the image to help identify it
+        if (!this.stackParent) { // Only add label to base obstacles
+          ctx.fillStyle = '#000000';
+          ctx.font = `${Math.min(12, this.width * 0.14)}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          // Extract name from image path
+          let labelText = this.getLabelText();
+          ctx.fillText(labelText, drawX + this.width / 2, this.y + this.height * 0.85);
+        }
         
         // Reset opacity and shadow effects
         ctx.globalAlpha = 1.0;
@@ -314,12 +337,21 @@ export class Obstacle {
           ctx.fillRect(drawX, this.y, this.width, this.height);
         }
         
-        // Add Bitcoin symbol on all obstacles
+        // Add Bitcoin symbol on all obstacles - increased size
         ctx.fillStyle = '#FFFFFF'; // White Bitcoin symbol
-        ctx.font = `${Math.min(this.width, this.height) * 0.4}px Arial`;
+        ctx.font = `${Math.min(this.width, this.height) * 0.6}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('₿', drawX + this.width/2, this.y + this.height/2);
+        ctx.fillText('₿', drawX + this.width/2, this.y + this.height/2 - (this.height * 0.1));
+        
+        // Add a generic label
+        if (!this.stackParent) {
+          ctx.fillStyle = '#000000';
+          ctx.font = `${Math.min(12, this.width * 0.14)}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('Bitcoin', drawX + this.width / 2, this.y + this.height * 0.85);
+        }
         
         // Reset shadow
         ctx.shadowColor = 'transparent';
@@ -343,6 +375,43 @@ export class Obstacle {
       console.error('Error in Obstacle.draw:', err);
     }
   }
+  
+  // Helper method to get appropriate label text from image name
+  getLabelText(): string {
+    try {
+      if (!this.imageName) return 'Bitcoin';
+      
+      // Clean up the file name to make it more readable
+      let name = this.imageName.replace(/\.\w+$/, ''); // Remove file extension
+      
+      const nameMap: {[key: string]: string} = {
+        '3ac': '3AC',
+        'bitcoinetf': 'BTC ETF',
+        'btcenergy': 'BTC Energy',
+        'china_pboc': 'China PBOC',
+        'elsalvador': 'El Salvador',
+        'ftx': 'FTX',
+        'halving': 'Halving',
+        'luna': 'Luna',
+        'MicroStrategy': 'MicroStrategy',
+        'mtgox': 'Mt. Gox',
+        'pizza': 'BTC Pizza',
+        'sec_logo': 'SEC',
+        'segwit': 'SegWit',
+        'silk_road': 'Silk Road',
+        'tesla': 'Tesla',
+        'bitcoin-logo': 'Bitcoin',
+        'bitcoin-symbol': 'Bitcoin',
+        'btc-icon': 'Bitcoin',
+        'bitcoin-fallback': 'Bitcoin'
+      };
+      
+      return nameMap[name] || name;
+    } catch (err) {
+      console.error('Error getting label text:', err);
+      return 'Bitcoin';
+    }
+  }
 }
 
 export default class ObstacleManager {
@@ -352,7 +421,7 @@ export default class ObstacleManager {
   minDistance: number = 300;
   spawnRate: number = 2000; // ms between obstacles
   groundY: number = 400; // Raised from 450 to 400 to reduce road space
-  gameSpeed: number = 200; // Starting game speed
+  gameSpeed: number = 150; // Reduced from 200 to 150 for slower initial speed
   minObstacleSpace: number = 200; // Minimum space between obstacles
   maxJumpableHeight: number = 70; // Increased from 60 to 70 for larger obstacles while maintaining jumpability
   cameraOffset: number = 0;
@@ -377,10 +446,10 @@ export default class ObstacleManager {
   
   // New variables for dynamic difficulty
   private totalGameTime: number = 0; // Track total game time
-  private speedIncreaseInterval: number = 4000; // Increase speed every 4 seconds (was 5 seconds)
+  private speedIncreaseInterval: number = 6000; // Increased from 4000 to 6000 for slower acceleration
   private lastSpeedIncreaseTime: number = 0; // Track when we last increased speed
   private baseSpawnRate: number = 5000; // Base time between obstacles in ms (increased from 3500 to 5000)
-  private maxGameSpeed: number = 600; // Maximum game speed (was 550)
+  private maxGameSpeed: number = 400; // Reduced from 600 to 400 for lower maximum speed
   private spawnRateVariability: number = 0.5; // 50% random variance in spawn timing (reduced from 70%)
   private lastObstacleDifficulty: number = 0; // Track how difficult the last obstacle was to ensure pacing
   private obstaclePatterns: number = 0; // Counter for obstacle patterns to help vary difficulty
@@ -527,9 +596,9 @@ export default class ObstacleManager {
         const oldSpeed = this.gameSpeed;
         
         // Slower speed increases in the first 15 seconds
-        let speedIncrease = 10; // Default increase
+        let speedIncrease = 5; // Reduced from 10 to 5 for slower acceleration
         if (this.totalGameTime < this.easyModeTimer) {
-          speedIncrease = 5; // Half speed increase during easy mode
+          speedIncrease = 3; // Reduced from 5 to 3 for even slower early game acceleration
         }
         
         this.gameSpeed = Math.min(this.maxGameSpeed, this.gameSpeed + speedIncrease);
@@ -548,13 +617,13 @@ export default class ObstacleManager {
         if (this.totalGameTime < this.gameStartGracePeriod) {
           // First few seconds - very gentle start (reduced from 20 to 10 for slower start)
           const startupBoost = Math.min(10, (this.totalGameTime / this.gameStartGracePeriod) * 10);
-          player.speed = 180 + startupBoost; // Start at 180 instead of 200 for easier beginning
+          player.speed = 140 + startupBoost; // Reduced from 180+10 to 140+10 for slower initial speed
           this.gameSpeed = player.speed;
         } else if (this.totalGameTime < this.easyModeTimer) {
           // Next few seconds - gentler ramp up (reduced boost from 40 to 25)
-          const startupBoost = 10 + Math.min(25, ((this.totalGameTime - this.gameStartGracePeriod) / 
-                              (this.easyModeTimer - this.gameStartGracePeriod)) * 25);
-          player.speed = 180 + startupBoost; // Adjusted base speed
+          const startupBoost = 10 + Math.min(20, ((this.totalGameTime - this.gameStartGracePeriod) / 
+                              (this.easyModeTimer - this.gameStartGracePeriod)) * 20);
+          player.speed = 140 + startupBoost; // Reduced from 180+25 to 140+20 for slower early game
           this.gameSpeed = player.speed;
         }
       }
@@ -821,148 +890,108 @@ export default class ObstacleManager {
   // Create a random obstacle
   createRandomObstacle(isRapidSuccession: boolean = false, isDoubleJumpObstacle: boolean = false, isEasyMode: boolean = false) {
     try {
-      const types: ObstacleType[] = ['box', 'ramp', 'rail'];
+      // Size multiplication factor to make obstacles bigger
+      const sizeFactor = 1.4; // Increased from 1.2 to 1.4 to make obstacles larger
       
-      // Less type restrictions
-      let typeIndex;
-      if (this.lastObstacleType && Math.random() > 0.3) { // 70% chance of different type (was 60%)
-        // Avoid selecting the same type twice in a row
-        const filteredTypes = types.filter(t => t !== this.lastObstacleType);
-        typeIndex = Math.floor(Math.random() * filteredTypes.length);
-        const type = filteredTypes[typeIndex];
-        this.lastObstacleType = type;
-      } else {
-        typeIndex = Math.floor(Math.random() * types.length);
-        this.lastObstacleType = types[typeIndex];
+      // Ensure the jump heights are scaled properly too
+      const maxHeight = isDoubleJumpObstacle ? this.maxDoubleJumpHeight * sizeFactor : this.maxJumpableHeight * sizeFactor;
+      
+      // Get the last few obstacles to avoid creating the same type in succession
+      const recentTypes = this.obstacles
+        .slice(-3)
+        .filter(o => !o.stackParent) // Only consider base obstacles, not stacked ones
+        .map(o => o.type);
+      
+      // Base probability distribution for obstacle types
+      let typeDistribution: {type: ObstacleType, weight: number}[] = [
+        { type: 'box', weight: 50 },
+        { type: 'ramp', weight: 40 },
+        { type: 'rail', weight: 10 }
+      ];
+      
+      // Adjust weights to avoid repeating the same type
+      if (recentTypes.length > 0) {
+        typeDistribution = typeDistribution.map(item => {
+          // Reduce probability if this type was recently used
+          const recentOccurrences = recentTypes.filter(t => t === item.type).length;
+          const penalty = recentOccurrences * 20; // More aggressive penalty (30 to 20 means more penalty)
+          return {
+            type: item.type,
+            weight: Math.max(5, item.weight - penalty) // Ensure at least 5% chance
+          };
+        });
       }
       
-      // Double jump obstacles can't be rails (they're fixed height)
-      if (isDoubleJumpObstacle && this.lastObstacleType === 'rail') {
-        this.lastObstacleType = Math.random() < 0.5 ? 'box' : 'ramp';
-      }
-      
-      // In easy mode, prefer ramps which are easier to jump over
-      if (isEasyMode && Math.random() < 0.7) {
-        this.lastObstacleType = 'ramp';
-      }
-      
-      const type = this.lastObstacleType;
-      
-      // Increment type count
-      this.obstacleTypes[type]++;
-      
-      // Determine size based on type and player limits
-      let width, height;
-      
-      // More aggressive difficulty scaling
-      const distanceFactor = Math.min(0.95, (this.totalDistance / 2500) * this.difficultyProgressionRate); 
-      const speedFactor = Math.min(0.95, (this.gameSpeed / this.maxGameSpeed) * 1.4); // Even more weight on speed
-      
-      // In easy mode, cap difficulty
-      let difficultyFactor = Math.max(distanceFactor, speedFactor);
+      // In easy mode, prefer boxes and ramps
       if (isEasyMode) {
-        difficultyFactor = Math.min(difficultyFactor, 0.3); // Cap max difficulty in easy mode
+        typeDistribution = typeDistribution.map(item => {
+          if (item.type === 'rail') {
+            return { ...item, weight: 5 }; // Reduce rail probability in easy mode
+          }
+          return item;
+        });
       }
       
-      // Introduce more dynamic difficulty patterns
-      let patternDifficulty = 0;
+      // Calculate total weight
+      const totalWeight = typeDistribution.reduce((sum, item) => sum + item.weight, 0);
       
-      // More extreme pattern difficulty variations
-      if (this.obstaclePatterns >= 7) {
-        patternDifficulty = isEasyMode ? 0.2 : 0.6; // Lower difficulty in easy mode
-      } else if (this.obstaclePatterns <= 2) {
-        patternDifficulty = -0.15; // Easier obstacle for breathing room (was -0.2)
+      // Select type based on weighted random
+      let randomWeight = Math.random() * totalWeight;
+      let selectedType: ObstacleType = 'box'; // Default
+      
+      for (const item of typeDistribution) {
+        if (randomWeight <= item.weight) {
+          selectedType = item.type;
+          break;
+        }
+        randomWeight -= item.weight;
       }
       
-      // More frequent and extreme random difficulty spikes
-      if (Math.random() < 0.3) { // Increased chance (was 0.25)
-        patternDifficulty += (Math.random() > 0.5 ? 0.35 : -0.25); // Larger positive swings
-      }
+      // Track this type for future spawn balancing
+      this.lastObstacleType = selectedType;
       
-      // Special handling for different obstacle types
-      if (isRapidSuccession) {
-        // Rapid succession obstacles should be easier to clear but placed closer
-        patternDifficulty -= 0.3; // Significantly lower difficulty
-      }
+      // Increment the type count in our tracking dictionary
+      this.obstacleTypes[selectedType]++;
       
-      if (isDoubleJumpObstacle) {
-        // Double jump obstacles need to be extra tall but not impossible
-        patternDifficulty += 0.7; // Significantly higher difficulty
-        console.log("Creating a DOUBLE JUMP obstacle!");
-      }
+      // Determine size based on type - now larger with the increased sizeFactor
+      let width, height, type;
+      type = selectedType;
       
-      // Higher difficulty ceiling but ensure still theoretically jumpable
-      // In easy mode, further reduce difficulty
-      let finalDifficulty = Math.min(0.95, difficultyFactor + patternDifficulty);
-      if (isEasyMode) {
-        finalDifficulty = Math.min(finalDifficulty, 0.4); // Cap difficulty in easy mode
-      }
-      
-      // Size multiplication factor to make all obstacles larger (visual enhancement only)
-      // The height/width ratio remains the same to maintain gameplay feel
-      const sizeFactor = 1.2; // Increase all obstacle dimensions by 20%
-      
+      // Increase widths for better visibility while keeping difficulty balance
       switch (type) {
         case 'box':
-          // More variance in box sizes
-          width = (30 + Math.random() * 55) * sizeFactor; // Increased base size: 36-102 (was 25-75)
+          // Increased box dimensions
+          width = (35 + Math.random() * 30) * sizeFactor; // was 30-50
+          height = isDoubleJumpObstacle ? 
+            (Math.random() * 25 + 60) * sizeFactor : // Double-jump boxes are very tall
+            (Math.random() * 20 + 15) * sizeFactor; // Standard boxes
           
-          if (isDoubleJumpObstacle) {
-            // Double jump boxes are taller to require double jumping
-            const doubleJumpHeight = 65 + (finalDifficulty * 25); // 65-90
-            height = Math.max(65, Math.min(this.maxDoubleJumpHeight, doubleJumpHeight)) * sizeFactor;
-          } else if (isRapidSuccession) {
-            // Rapid succession boxes are narrower and shorter
-            width = (20 + Math.random() * 25) * sizeFactor; // 24-54 (was 20-45)
-            const maxBoxHeight = 20 + (finalDifficulty * 15); // Lower height
-            height = (15 + Math.random() * Math.min(20, maxBoxHeight)) * sizeFactor;
-          } else {
-            // Regular boxes with more height variation
-            const maxBoxHeight = 25 + (finalDifficulty * 32); // 25-57 (was 25-55)
-            height = (20 + Math.random() * Math.min(37, maxBoxHeight)) * sizeFactor;
-          }
+          // Cap height at maxHeight
+          height = Math.min(height, maxHeight);
           break;
           
         case 'ramp':
-          if (isDoubleJumpObstacle) {
-            // Double jump ramps are taller to require double jumping
-            width = (60 + Math.random() * 40) * sizeFactor; // 72-120 (was 60-100)
-            const doubleJumpHeight = 70 + (finalDifficulty * 20); // 70-90
-            height = Math.max(70, Math.min(this.maxDoubleJumpHeight, doubleJumpHeight)) * sizeFactor;
-          } else if (isRapidSuccession) {
-            // Rapid succession ramps are narrower
-            width = (40 + Math.random() * 30) * sizeFactor; // 48-84 (was 40-70)
-            const maxRampHeight = 30 + (finalDifficulty * 15); // Lower height
-            height = (25 + Math.random() * Math.min(20, maxRampHeight)) * sizeFactor;
-          } else {
-            // Regular ramps with more variance
-            width = (50 + Math.random() * 65) * sizeFactor; // 60-138 (was 50-115)
-            const maxRampHeight = 35 + (finalDifficulty * 25); // 35-60
-            height = (30 + Math.random() * Math.min(30, maxRampHeight)) * sizeFactor;
-          }
+          // Increased ramp dimensions (ramps should be larger for game balance)
+          width = (50 + Math.random() * 40) * sizeFactor; // was 40-70
+          height = isDoubleJumpObstacle ?
+            (Math.random() * 20 + 55) * sizeFactor : // Double-jump ramps are tall
+            (Math.random() * 15 + 20) * sizeFactor; // Standard ramps
+            
+          // Cap height at maxHeight
+          height = Math.min(height, maxHeight);
           break;
           
         case 'rail':
-          if (isRapidSuccession) {
-            // Rapid succession rails are shorter
-            width = (60 + Math.random() * 50) * sizeFactor; // 72-132 (was 60-110)
-          } else {
-            // Regular rails can be longer
-            width = (70 + Math.random() * 110) * sizeFactor; // 84-216 (was 70-180)
-          }
-          height = 15 * sizeFactor; // Rails have fixed height, but sized up for visibility
+          // Rails stay narrow in height but get wider
+          width = (80 + Math.random() * 70) * sizeFactor; // was 70-120
+          height = (8 + Math.random() * 10) * sizeFactor; // was 8-15, low to make them easier to jump
           break;
           
         default:
+          // Fallback size
           width = 40 * sizeFactor;
           height = 30 * sizeFactor;
       }
-      
-      // Make sure height is jumpable with appropriate jump type
-      // We're scaling up the visuals, but need to ensure gameplay constraints are maintained
-      height = isDoubleJumpObstacle 
-        ? Math.min(height, this.maxDoubleJumpHeight * sizeFactor) 
-        : Math.min(height, this.maxJumpableHeight * sizeFactor);
       
       // Track difficulty of this obstacle
       this.lastObstacleDifficulty = (height / (isDoubleJumpObstacle ? this.maxDoubleJumpHeight * sizeFactor : this.maxJumpableHeight * sizeFactor)) * 0.7 + (width / (180 * sizeFactor)) * 0.3;
@@ -987,7 +1016,7 @@ export default class ObstacleManager {
         // Stacking logic
         const stackMultiplier = isRapidSuccession ? 0.6 : 1.4; // More stacking for regular obstacles (was 1.3)
         const baseStackChance = this.stackedObstacleChance * stackMultiplier;
-        const progressionBonus = finalDifficulty * 0.35; // Increases with difficulty (was 0.3)
+        const progressionBonus = this.lastObstacleDifficulty * 0.35; // Increases with difficulty (was 0.3)
         
         // Reduce stack chance if we've had multiple difficult obstacles
         const patternAdjustment = this.obstaclePatterns >= 7 ? -0.1 : 0;
@@ -996,14 +1025,14 @@ export default class ObstacleManager {
         
         if (Math.random() < finalStackChance && type !== 'rail') {
           // Create a second stacked obstacle
-          this.createStackedObstacle(obstacle, finalDifficulty);
+          this.createStackedObstacle(obstacle, this.lastObstacleDifficulty);
           
           // Chance of creating a triple-stack for extreme challenge
           const tripleStackChance = isRapidSuccession ? 0.05 : 0.18; // 18% for regular (was 15%)
-          if (finalDifficulty > 0.5 && Math.random() < tripleStackChance) {
+          if (this.lastObstacleDifficulty > 0.5 && Math.random() < tripleStackChance) {
             const doubleStackedObstacle = this.obstacles[this.obstacles.length - 1];
             if (doubleStackedObstacle && doubleStackedObstacle.stackParent === obstacle) {
-              this.createStackedObstacle(doubleStackedObstacle, finalDifficulty * 0.8);
+              this.createStackedObstacle(doubleStackedObstacle, this.lastObstacleDifficulty * 0.8);
             }
           }
         }
@@ -1011,7 +1040,7 @@ export default class ObstacleManager {
       
       return obstacle;
     } catch (err) {
-      console.error('Error in ObstacleManager.createRandomObstacle:', err);
+      console.error('Error creating random obstacle:', err);
       return null;
     }
   }
@@ -1187,7 +1216,7 @@ export default class ObstacleManager {
       this.lastSpeedIncreaseTime = 0;
       this.timeSinceLastObstacle = 0;
       this.spawnActive = false;
-      this.gameSpeed = 200; // Reset game speed
+      this.gameSpeed = 150; // Reduced from 200 to 150 for lower initial speed
       this.lastObstacleType = null;
       this.obstaclePatterns = 0;
       this.totalDistance = 0;
