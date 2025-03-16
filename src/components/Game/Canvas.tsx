@@ -1083,6 +1083,12 @@ export const Canvas: React.FC<GameProps> = ({
     }
   }, [modalCooldown]);
 
+  // Function to toggle high scores
+  const toggleHighScores = useCallback(() => {
+    console.log('Toggle high scores button clicked');
+    showHighScores();
+  }, [showHighScores]);
+
   return (
     <div className="fixed inset-0 flex flex-col bg-black overflow-hidden">
       {/* Main game container - takes all space */}
@@ -1217,13 +1223,13 @@ export const Canvas: React.FC<GameProps> = ({
             fontSize: '16px'
           }}
         >
-          If you like the game, follow me <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a>
+          Built with ♥︎ for ₿itcoin. Follow <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a>
         </div>
         
         {/* Game control buttons */}
         <div style={{ display: 'flex', gap: '10px' }}>
           {/* Sound Toggle Button */}
-          <button 
+          <button
             onClick={toggleSound}
             style={{
               backgroundColor: soundEnabled ? 'rgba(55, 65, 81, 0.85)' : 'rgba(239, 68, 68, 0.85)',
@@ -1255,9 +1261,9 @@ export const Canvas: React.FC<GameProps> = ({
           </button>
           
           {/* High Scores Button */}
-          <button 
+          <button
             id="highscores-toggle-button"
-            onClick={showHighScores}
+            onClick={toggleHighScores}
             style={{
               backgroundColor: 'rgba(59, 130, 246, 0.85)',
               color: 'white',

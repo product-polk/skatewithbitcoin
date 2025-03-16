@@ -17,7 +17,7 @@ const obstacleImages: {[key: string]: HTMLImageElement} = {};
 // Array of Bitcoin-themed obstacle image names
 const bitcoinObstacleImages = [
   '3ac.png',
-  'bitcoinetf.png.png',
+  'bitcoinetf.png',
   'btcenergy.png',
   'china_pboc.png',
   'elsalvador.png',
@@ -26,11 +26,18 @@ const bitcoinObstacleImages = [
   'luna.png',
   'MicroStrategy.png',
   'mtgox.png',
-  'pizza,png.png',
+  'pizza.png',
   'sec_logo.png',
   'segwit.png',
   'silk_road.png',
   'tesla.png'
+];
+
+// Fallback images in case all Bitcoin-themed images fail to load
+const fallbackObstacleImages = [
+  'bitcoin-logo.png',
+  'lightning.png', 
+  'satoshi.png'
 ];
 
 // Track which images have been used to avoid immediate repetition
@@ -39,25 +46,31 @@ const MAX_RECENT_IMAGES = 3; // Don't repeat the last 3 images
 
 // Function to get a random Bitcoin-themed obstacle image
 function getRandomBitcoinImage(): string {
-  // Filter out recently used images if possible
-  let availableImages = bitcoinObstacleImages.filter(img => !recentlyUsedImages.includes(img));
-  
-  // If we've filtered out all images, reset and use all of them
-  if (availableImages.length === 0) {
-    availableImages = bitcoinObstacleImages;
-    recentlyUsedImages = [];
+  try {
+    // Filter out recently used images if possible
+    let availableImages = bitcoinObstacleImages.filter(img => !recentlyUsedImages.includes(img));
+    
+    // If we've filtered out all images, reset and use all of them
+    if (availableImages.length === 0) {
+      availableImages = bitcoinObstacleImages;
+      recentlyUsedImages = [];
+    }
+    
+    // Select a random image from the available ones
+    const selectedImage = availableImages[Math.floor(Math.random() * availableImages.length)];
+    
+    // Add to recently used and maintain max length
+    recentlyUsedImages.push(selectedImage);
+    if (recentlyUsedImages.length > MAX_RECENT_IMAGES) {
+      recentlyUsedImages.shift();
+    }
+    
+    return selectedImage;
+  } catch (err) {
+    console.error('Error in getRandomBitcoinImage, using fallback:', err);
+    // Return a fallback image if there's an error
+    return fallbackObstacleImages[Math.floor(Math.random() * fallbackObstacleImages.length)];
   }
-  
-  // Select a random image from the available ones
-  const selectedImage = availableImages[Math.floor(Math.random() * availableImages.length)];
-  
-  // Add to recently used and maintain max length
-  recentlyUsedImages.push(selectedImage);
-  if (recentlyUsedImages.length > MAX_RECENT_IMAGES) {
-    recentlyUsedImages.shift();
-  }
-  
-  return selectedImage;
 }
 
 // Function to load an obstacle image if not already loaded
@@ -68,21 +81,56 @@ function getObstacleImage(type: ObstacleType): HTMLImageElement {
   // Create new image
   const img = new Image();
   
+  // Improve image rendering quality
+  img.style.imageRendering = 'auto';
+  
+  // Enable crossOrigin to avoid CORS issues when processing
+  img.crossOrigin = 'anonymous';
+  
   // Select a random Bitcoin-themed image
   const bitcoinImage = getRandomBitcoinImage();
-  img.src = `/images/Obstacles/${bitcoinImage}`;
+  
+  // Track load attempts for fallback chain
+  let loadAttempt = 0;
+  const maxAttempts = 3;
+  
+  // Define our image loading function to handle retries
+  const attemptImageLoad = () => {
+    loadAttempt++;
+    
+    if (loadAttempt === 1) {
+      // First attempt: use Bitcoin image from Obstacles folder
+      img.src = `/images/Obstacles/${bitcoinImage}`;
+    } else if (loadAttempt === 2) {
+      // Second attempt: try fallback folder
+      const fallbackImage = fallbackObstacleImages[Math.floor(Math.random() * fallbackObstacleImages.length)];
+      console.log(`Trying fallback image: ${fallbackImage}`);
+      img.src = `/images/${fallbackImage}`;
+    } else {
+      // Final attempt: use obstacle type image
+      console.log(`Using final fallback for type: ${type}`);
+      img.src = `/images/obstacle-${type}.png`;
+    }
+  };
+  
+  // Start the first load attempt
+  attemptImageLoad();
   
   // Store in cache with unique key
   obstacleImages[imageKey] = img;
   
   img.onload = () => {
-    console.log(`Loaded Bitcoin obstacle image: ${bitcoinImage}`);
+    console.log(`Loaded obstacle image on attempt ${loadAttempt}: ${img.src}`);
   };
   
   img.onerror = (err) => {
-    console.error(`Failed to load Bitcoin obstacle image: ${bitcoinImage}`, err);
-    // Fallback to original obstacle image if Bitcoin image fails
-    img.src = `/images/obstacle-${type}.png`;
+    console.error(`Failed to load image on attempt ${loadAttempt}: ${img.src}`, err);
+    
+    // Try next fallback if we haven't reached max attempts
+    if (loadAttempt < maxAttempts) {
+      console.log(`Trying fallback image, attempt ${loadAttempt + 1}/${maxAttempts}`);
+      attemptImageLoad();
+    }
   };
   
   return img;
@@ -118,6 +166,15 @@ export class Obstacle {
       this.image.onload = () => {
         this.imageLoaded = true;
       };
+      
+      // Add a backup timeout to consider image loaded after 3 seconds
+      // This helps if an image is stalled but not errored
+      setTimeout(() => {
+        if (!this.imageLoaded && this.image) {
+          console.log('Forcing image loaded state after timeout');
+          this.imageLoaded = true;
+        }
+      }, 3000);
     }
   }
   
@@ -172,8 +229,15 @@ export class Obstacle {
           ctx.globalAlpha = 0.5;
         }
         
-        // Draw a background box for the obstacle
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; // Semi-transparent white background
+        // Draw a background box for the obstacle - increased opacity from 0.85 to 0.95
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        
+        // Add a subtle shadow for depth and better visibility
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetY = 2;
+        ctx.shadowOffsetX = 0;
+        
         ctx.fillRect(
           drawX, 
           this.y, 
@@ -181,9 +245,11 @@ export class Obstacle {
           this.height
         );
         
-        // Create a visually appealing border
-        ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)'; // Orange border for Bitcoin theme
-        ctx.lineWidth = 1.5; // Reduced border width
+        // Create a more pronounced border
+        ctx.shadowBlur = 0; // Remove shadow for border
+        ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = 'rgba(255, 165, 0, 0.9)'; // Increased orange border opacity from 0.8 to 0.9
+        ctx.lineWidth = 2; // Increased from 1.5 to 2 for better visibility
         ctx.strokeRect(
           drawX, 
           this.y, 
@@ -191,14 +257,14 @@ export class Obstacle {
           this.height
         );
         
-        // Calculate dimensions that preserve aspect ratio
+        // Calculate dimensions that preserve aspect ratio - increase scale slightly
         const originalWidth = this.image.width || 100;
         const originalHeight = this.image.height || 100;
         
-        // Calculate scaling factor while preserving aspect ratio
+        // Calculate scaling factor while preserving aspect ratio - increased from 0.8 to 0.85
         let scale = Math.min(
-          (this.width * 0.8) / originalWidth,
-          (this.height * 0.8) / originalHeight
+          (this.width * 0.85) / originalWidth,
+          (this.height * 0.85) / originalHeight
         );
         
         // Calculate new dimensions
@@ -209,6 +275,12 @@ export class Obstacle {
         const centerX = drawX + (this.width - scaledWidth) / 2;
         const centerY = this.y + (this.height - scaledHeight) / 2;
         
+        // Remove shadow for image drawing
+        ctx.shadowColor = 'transparent';
+        
+        // Boost contrast before drawing the image
+        ctx.globalAlpha = this.hit ? 0.5 : 1.0;
+        
         // Draw the image with preserved aspect ratio
         ctx.drawImage(
           this.image,
@@ -218,10 +290,11 @@ export class Obstacle {
           scaledHeight
         );
         
-        // Reset opacity
-        if (this.hit) {
-          ctx.globalAlpha = 1.0;
-        }
+        // Reset opacity and shadow effects
+        ctx.globalAlpha = 1.0;
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
       } else {
         // Fallback to shapes if image is not loaded
         if (this.hit && this.type !== 'box') {
@@ -240,6 +313,11 @@ export class Obstacle {
           }
         }
         
+        // Add shadow for fallback shapes too
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetY = 2;
+        
         // Draw different obstacle shapes as fallback
         if (this.type === 'ramp') {
           // Draw ramp as a triangle
@@ -250,9 +328,23 @@ export class Obstacle {
           ctx.closePath();
           ctx.fillStyle = this.hit ? '#555' : '#32CD32'; // Lime Green
           ctx.fill();
+          
+          // Add a Bitcoin symbol in the middle as a fallback visual
+          ctx.fillStyle = '#F7931A'; // Bitcoin orange
+          ctx.font = `${Math.min(this.width, this.height) * 0.4}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('₿', drawX + this.width/2, this.y + this.height/2);
         } else if (this.type === 'box') {
           // Draw box as a rectangle
           ctx.fillRect(drawX, this.y, this.width, this.height);
+          
+          // Add a Bitcoin symbol in the middle as a fallback visual
+          ctx.fillStyle = '#F7931A'; // Bitcoin orange
+          ctx.font = `${Math.min(this.width, this.height) * 0.4}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('₿', drawX + this.width/2, this.y + this.height/2);
         } else if (this.type === 'rail') {
           // Draw rail with supports
           ctx.fillRect(drawX, this.y, this.width, this.height);
@@ -265,7 +357,23 @@ export class Obstacle {
           for (let x = supportSpacing/2; x < this.width; x += supportSpacing) {
             ctx.fillRect(drawX + x - supportWidth/2, this.y + this.height, supportWidth, 20);
           }
+          
+          // Add small Bitcoin symbols along the rail
+          ctx.fillStyle = '#F7931A'; // Bitcoin orange
+          ctx.font = `${this.height * 0.8}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          const symbolSpacing = Math.min(80, this.width / 3);
+          for (let x = symbolSpacing/2; x < this.width; x += symbolSpacing) {
+            ctx.fillText('₿', drawX + x, this.y + this.height/2);
+          }
         }
+        
+        // Reset shadow
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
       }
       
       // For debugging hitboxes
@@ -306,6 +414,9 @@ export default class ObstacleManager {
   private lastObstacleType: ObstacleType | null = null; // Track last type to avoid repeats
   private stackedObstacleChance: number = 0.3; // 30% chance of stacked obstacles
   private passedObstacles: Set<Obstacle> = new Set(); // Track obstacles that have been passed
+  
+  // New property to track preloaded images
+  private preloadedImages: Set<string> = new Set();
   
   // Track current jump to only award sats once per jump
   private currentJumpId: number = 0;
@@ -367,6 +478,47 @@ export default class ObstacleManager {
   
   constructor() {
     this.reset();
+    this.preloadObstacleImages();
+  }
+  
+  // Preload obstacle images to improve performance
+  private preloadObstacleImages() {
+    try {
+      console.log('Preloading obstacle images...');
+      
+      // Preload a few Bitcoin images
+      const imagesToPreload = [...bitcoinObstacleImages.slice(0, 5), ...fallbackObstacleImages];
+      
+      imagesToPreload.forEach(imgSrc => {
+        // Skip if already preloaded
+        if (this.preloadedImages.has(imgSrc)) return;
+        
+        // Create new image and load
+        const img = new Image();
+        img.onload = () => {
+          console.log(`Preloaded image: ${imgSrc}`);
+          this.preloadedImages.add(imgSrc);
+        };
+        img.onerror = () => {
+          console.warn(`Failed to preload image: ${imgSrc}`);
+        };
+        
+        // Set source to trigger loading
+        img.src = `/images/Obstacles/${imgSrc}`;
+      });
+      
+      // Also preload fallbacks for each obstacle type
+      ['box', 'ramp', 'rail'].forEach(type => {
+        const img = new Image();
+        img.onload = () => {
+          console.log(`Preloaded fallback for: ${type}`);
+        };
+        img.src = `/images/obstacle-${type}.png`;
+      });
+      
+    } catch (err) {
+      console.error('Error preloading obstacle images:', err);
+    }
   }
   
   // Update all obstacles
