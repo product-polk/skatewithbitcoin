@@ -36,9 +36,9 @@ const bitcoinObstacleImages = [
 // Fallback images in case Bitcoin-themed images fail to load
 // These should be simple, reliable Bitcoin images that are guaranteed to exist
 const fallbackObstacleImages = [
-  'Bitcoin-Logo.png',   // Using existing Bitcoin logo (note the case)
-  'bitcoin-symbol.png', // Will be added next
-  'btc-icon.png'        // Will be added next
+  'bitcoin-fallbacks/bitcoin-logo.png',   // Using guaranteed fallback from dedicated folder
+  'bitcoin-fallbacks/bitcoin-symbol.png', // Using guaranteed fallback from dedicated folder
+  'bitcoin-fallbacks/btc-icon.png'        // Using guaranteed fallback from dedicated folder
 ];
 
 // Track which images have been used to avoid immediate repetition

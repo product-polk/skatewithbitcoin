@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/fix-obstacle-filenames.js && node scripts/convert-svg-to-png.js && node scripts/convert-extra-fallback.js",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "vercel-build": "npm run prebuild && next build"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.0.14",

@@ -12,7 +12,12 @@ const nextConfig = {
   webpack: (config, { isServer }) => {
     // Optimize loading of static assets
     if (!isServer) {
-      // Increase priority of static asset loading
+      // Make sure optimization and splitChunks objects exist
+      config.optimization = config.optimization || {};
+      config.optimization.splitChunks = config.optimization.splitChunks || {};
+      config.optimization.splitChunks.cacheGroups = config.optimization.splitChunks.cacheGroups || {};
+      
+      // Now it's safe to add the static property
       config.optimization.splitChunks.cacheGroups.static = {
         test: /\.(png|jpg|jpeg|gif|svg|ico|webp)$/,
         chunks: 'all',
