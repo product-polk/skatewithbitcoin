@@ -14,23 +14,78 @@ export interface CollisionResult {
 // Image cache to avoid loading the same images multiple times
 const obstacleImages: {[key: string]: HTMLImageElement} = {};
 
-// Function to load an obstacle image if not already loaded
-function getObstacleImage(type: ObstacleType): HTMLImageElement {
-  if (!obstacleImages[type]) {
-    const img = new Image();
-    img.src = `/images/obstacle-${type}.png`;
-    obstacleImages[type] = img;
-    
-    img.onload = () => {
-      console.log(`Loaded obstacle image: ${type}`);
-    };
-    
-    img.onerror = (err) => {
-      console.error(`Failed to load obstacle image: ${type}`, err);
-    };
+// Array of Bitcoin-themed obstacle image names
+const bitcoinObstacleImages = [
+  '3ac.png',
+  'bitcoinetf.png.png',
+  'btcenergy.png',
+  'china_pboc.png',
+  'elsalvador.png',
+  'ftx.png',
+  'halving.png',
+  'luna.png',
+  'MicroStrategy.png',
+  'mtgox.png',
+  'pizza,png.png',
+  'sec_logo.png',
+  'segwit.png',
+  'silk_road.png',
+  'tesla.png'
+];
+
+// Track which images have been used to avoid immediate repetition
+let recentlyUsedImages: string[] = [];
+const MAX_RECENT_IMAGES = 3; // Don't repeat the last 3 images
+
+// Function to get a random Bitcoin-themed obstacle image
+function getRandomBitcoinImage(): string {
+  // Filter out recently used images if possible
+  let availableImages = bitcoinObstacleImages.filter(img => !recentlyUsedImages.includes(img));
+  
+  // If we've filtered out all images, reset and use all of them
+  if (availableImages.length === 0) {
+    availableImages = bitcoinObstacleImages;
+    recentlyUsedImages = [];
   }
   
-  return obstacleImages[type];
+  // Select a random image from the available ones
+  const selectedImage = availableImages[Math.floor(Math.random() * availableImages.length)];
+  
+  // Add to recently used and maintain max length
+  recentlyUsedImages.push(selectedImage);
+  if (recentlyUsedImages.length > MAX_RECENT_IMAGES) {
+    recentlyUsedImages.shift();
+  }
+  
+  return selectedImage;
+}
+
+// Function to load an obstacle image if not already loaded
+function getObstacleImage(type: ObstacleType): HTMLImageElement {
+  // Generate a unique key for this obstacle instance
+  const imageKey = `${type}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  
+  // Create new image
+  const img = new Image();
+  
+  // Select a random Bitcoin-themed image
+  const bitcoinImage = getRandomBitcoinImage();
+  img.src = `/images/Obstacles/${bitcoinImage}`;
+  
+  // Store in cache with unique key
+  obstacleImages[imageKey] = img;
+  
+  img.onload = () => {
+    console.log(`Loaded Bitcoin obstacle image: ${bitcoinImage}`);
+  };
+  
+  img.onerror = (err) => {
+    console.error(`Failed to load Bitcoin obstacle image: ${bitcoinImage}`, err);
+    // Fallback to original obstacle image if Bitcoin image fails
+    img.src = `/images/obstacle-${type}.png`;
+  };
+  
+  return img;
 }
 
 // Base obstacle class
@@ -53,7 +108,7 @@ export class Obstacle {
     this.height = height;
     this.type = type;
     
-    // Load the image for this obstacle type
+    // Load a random Bitcoin-themed image for this obstacle
     this.image = getObstacleImage(type);
     
     // Check if image is already loaded
@@ -117,13 +172,50 @@ export class Obstacle {
           ctx.globalAlpha = 0.5;
         }
         
-        // Draw the image
+        // Draw a background box for the obstacle
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; // Semi-transparent white background
+        ctx.fillRect(
+          drawX, 
+          this.y, 
+          this.width, 
+          this.height
+        );
+        
+        // Create a visually appealing border
+        ctx.strokeStyle = 'rgba(255, 165, 0, 0.8)'; // Orange border for Bitcoin theme
+        ctx.lineWidth = 1.5; // Reduced border width
+        ctx.strokeRect(
+          drawX, 
+          this.y, 
+          this.width, 
+          this.height
+        );
+        
+        // Calculate dimensions that preserve aspect ratio
+        const originalWidth = this.image.width || 100;
+        const originalHeight = this.image.height || 100;
+        
+        // Calculate scaling factor while preserving aspect ratio
+        let scale = Math.min(
+          (this.width * 0.8) / originalWidth,
+          (this.height * 0.8) / originalHeight
+        );
+        
+        // Calculate new dimensions
+        const scaledWidth = originalWidth * scale;
+        const scaledHeight = originalHeight * scale;
+        
+        // Calculate centered position
+        const centerX = drawX + (this.width - scaledWidth) / 2;
+        const centerY = this.y + (this.height - scaledHeight) / 2;
+        
+        // Draw the image with preserved aspect ratio
         ctx.drawImage(
           this.image,
-          drawX,
-          this.y,
-          this.width,
-          this.height
+          centerX,
+          centerY,
+          scaledWidth,
+          scaledHeight
         );
         
         // Reset opacity
