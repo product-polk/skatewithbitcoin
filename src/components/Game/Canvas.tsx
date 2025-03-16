@@ -7,7 +7,6 @@ import SoundManager from '../../core/SoundManager';
 import Player from '../../entities/Player';
 import ObstacleManager, { CollisionResult } from '../../entities/ObstacleManager';
 import HighScores from './HighScores';
-import { isMobileDevice } from '../../utils/device';
 
 // Define game window properties
 interface GameProps {
@@ -1100,20 +1099,34 @@ export const Canvas: React.FC<GameProps> = ({
     showHighScores();
   }, [showHighScores]);
 
+  // IMPORTANT: Add a forced mobile mode that can be toggled
+  const [forceMobileMode, setForceMobileMode] = useState<boolean>(false);
+  
   // Function to detect mobile devices more reliably
   const detectMobileDevice = (): boolean => {
-    return (
-      typeof window !== 'undefined' && (
-        navigator.userAgent.match(/Android/i) ||
-        navigator.userAgent.match(/webOS/i) ||
-        navigator.userAgent.match(/iPhone/i) ||
-        navigator.userAgent.match(/iPad/i) ||
-        navigator.userAgent.match(/iPod/i) ||
-        navigator.userAgent.match(/BlackBerry/i) ||
-        navigator.userAgent.match(/Windows Phone/i) ||
-        window.innerWidth <= 768 // Also consider small screens as mobile
-      ) ? true : false
+    // Force mobile mode if set
+    if (forceMobileMode) return true;
+    
+    // Check if window is defined (for SSR)
+    if (typeof window === 'undefined') return false;
+    
+    // Check user agent
+    const userAgentCheck = Boolean(
+      navigator.userAgent.match(/Android/i) ||
+      navigator.userAgent.match(/webOS/i) ||
+      navigator.userAgent.match(/iPhone/i) ||
+      navigator.userAgent.match(/iPad/i) ||
+      navigator.userAgent.match(/iPod/i) ||
+      navigator.userAgent.match(/BlackBerry/i) ||
+      navigator.userAgent.match(/Windows Phone/i)
     );
+    
+    // Also consider screen width
+    const smallScreenCheck = window.innerWidth <= 768;
+    
+    console.log('Mobile detection:', { userAgentCheck, smallScreenCheck, forceMobileMode });
+    
+    return userAgentCheck || smallScreenCheck;
   };
 
   // Detect mobile device and orientation on component mount
@@ -1128,13 +1141,14 @@ export const Canvas: React.FC<GameProps> = ({
       const isPortraitMode = window.innerHeight > window.innerWidth;
       setIsPortrait(isPortraitMode);
       
-      // Only show orientation prompt on mobile in portrait mode
-      setShowOrientationPrompt(isMobileDevice && isPortraitMode);
+      // Only show orientation prompt on mobile in portrait mode - modified to be less strict
+      const shouldShowOrientationPrompt = isMobileDevice && isPortraitMode && window.innerWidth < 500;
+      setShowOrientationPrompt(shouldShowOrientationPrompt);
       
-      // Mobile devices should always have touch controls
+      // Mobile devices should always have touch controls - regardless of orientation
       setTouchControlsVisible(isMobileDevice);
       
-      console.log(`Device detection: Mobile: ${isMobileDevice}, Portrait: ${isPortraitMode}, Touch: ${isMobileDevice}`);
+      console.log(`Device detection: Mobile: ${isMobileDevice}, Portrait: ${isPortraitMode}, Touch: ${isMobileDevice}, ShowPrompt: ${shouldShowOrientationPrompt}`);
     };
     
     // Run check initially
@@ -1144,14 +1158,47 @@ export const Canvas: React.FC<GameProps> = ({
     window.addEventListener('resize', checkMobile);
     window.addEventListener('orientationchange', checkMobile);
     
+    // Set a 3 second check to ensure mobile controls are visible
+    const controlCheckTimer = setTimeout(() => {
+      if (!isMobile && window.innerWidth <= 768) {
+        console.log('Forcing mobile mode due to small screen size');
+        setForceMobileMode(true);
+        setIsMobile(true);
+        setTouchControlsVisible(true);
+      }
+    }, 3000);
+    
     return () => {
       window.removeEventListener('resize', checkMobile);
       window.removeEventListener('orientationchange', checkMobile);
+      clearTimeout(controlCheckTimer);
     };
-  }, []);
+  }, [forceMobileMode]);
 
   return (
     <div className="fixed inset-0 flex flex-col bg-black overflow-hidden">
+      {/* Mobile Debug Panel - always visible */}
+      <div className="absolute top-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-1 z-50">
+        <div>Mobile: {isMobile ? '✅' : '❌'} | Controls: {touchControlsVisible ? '✅' : '❌'} | Portrait: {isPortrait ? '✅' : '❌'}</div>
+        <div>
+          <button 
+            onClick={() => {
+              setForceMobileMode(!forceMobileMode);
+              console.log('Force mobile mode toggled:', !forceMobileMode);
+            }}
+            style={{
+              backgroundColor: forceMobileMode ? 'green' : 'red',
+              color: 'white',
+              padding: '2px 4px',
+              fontSize: '10px',
+              borderRadius: '4px'
+            }}
+          >
+            {forceMobileMode ? 'Mobile Mode ON' : 'Mobile Mode OFF'}
+          </button>
+        </div>
+      </div>
+
       {/* Main game container - takes all space, including area for controls */}
       <div className="flex-grow relative w-full flex items-center justify-center bg-black overflow-hidden">
         <canvas
@@ -1274,46 +1321,9 @@ export const Canvas: React.FC<GameProps> = ({
           </div>
         )}
         
-        {/* Game Over Screen - Only show Start Game button, not Restart */}
-        <div className="absolute bottom-16 left-0 right-0 flex justify-center">
-          {!gameStarted && !showOrientationPrompt && !isMobile && (
-            <button 
-              onClick={handleStartGame}
-              style={{
-                backgroundColor: 'rgba(22, 163, 74, 0.85)',
-                color: 'white',
-                padding: '12px 24px',
-                borderRadius: '8px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                backdropFilter: 'blur(4px)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                opacity: '0.95'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
-                e.currentTarget.style.backgroundColor = 'rgba(21, 128, 61, 0.85)';
-                e.currentTarget.style.opacity = '1';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-                e.currentTarget.style.backgroundColor = 'rgba(22, 163, 74, 0.85)';
-                e.currentTarget.style.opacity = '0.95';
-              }}
-            >
-              Start Game
-            </button>
-          )}
-        </div>
-        
-        {/* Mobile-specific Start Game button - large and centered */}
-        {!gameStarted && !showOrientationPrompt && isMobile && (
-          <div className="absolute inset-0 flex items-center justify-center">
+        {/* MODIFIED: Mobile-specific Start Game button - large and centered - SHOW ON ALL SMALL SCREENS */}
+        {!gameStarted && (isMobile || window.innerWidth <= 768) && (
+          <div className="absolute inset-0 flex items-center justify-center z-50">
             <button 
               onClick={handleStartGame}
               style={{
@@ -1335,9 +1345,9 @@ export const Canvas: React.FC<GameProps> = ({
           </div>
         )}
         
-        {/* Mobile touch controls - now positioned as overlay directly on game canvas */}
-        {isMobile && gameStarted && !playerRef.current?.crashed && !showOrientationPrompt && !isHighScoresOpen && (
-          <div className="absolute bottom-16 left-0 right-0 flex justify-between px-4 z-40">
+        {/* MODIFIED: Mobile touch controls - now visible on all mobile devices regardless of other states */}
+        {(isMobile || window.innerWidth <= 768) && gameStarted && !playerRef.current?.crashed && (
+          <div className="absolute bottom-16 left-0 right-0 flex justify-between px-4 z-50">
             {/* Left side controls - movement */}
             <div className="flex gap-2">
               <button
@@ -1468,12 +1478,11 @@ export const Canvas: React.FC<GameProps> = ({
           </div>
         )}
 
-        {/* Restart button for mobile when crashed - large centered restart button */}
-        {playerRef.current?.crashed && isMobile && !isHighScoresOpen && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        {/* MODIFIED: Restart button for mobile when crashed - large centered restart button */}
+        {playerRef.current?.crashed && (isMobile || window.innerWidth <= 768) && !isHighScoresOpen && (
+          <div className="absolute inset-0 flex items-center justify-center z-50">
             <button
               onClick={handleRestartGame}
-              className="pointer-events-auto"
               style={{
                 backgroundColor: 'rgba(22, 163, 74, 0.9)',
                 color: 'white',
@@ -1493,155 +1502,127 @@ export const Canvas: React.FC<GameProps> = ({
           </div>
         )}
 
-        {/* Alternative restart button at bottom of screen - always visible on game over */}
-        {playerRef.current?.crashed && isMobile && !isHighScoresOpen && (
-          <div className="absolute bottom-28 left-0 right-0 flex justify-center z-50">
-            <button
-              onClick={handleRestartGame}
-              style={{
-                backgroundColor: 'rgba(79, 70, 229, 0.9)',
-                color: 'white',
-                padding: '12px 24px',
-                borderRadius: '8px',
-                fontSize: '18px',
-                fontWeight: 'bold',
-                border: '2px solid rgba(255,255,255,0.3)',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-              }}
-            >
-              Restart Game
-            </button>
-          </div>
-        )}
-
-        {/* Debug info for mobile */}
-        {isMobile && playerRef.current?.crashed && (
-          <div className="absolute top-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-1 z-50">
-            <div>Mobile: {isMobile ? '✅' : '❌'} | Touch: {touchControlsVisible ? '✅' : '❌'} | Crashed: {playerRef.current?.crashed ? '✅' : '❌'}</div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer bar with attribution and buttons - now positioned absolutely to avoid layout shifts */}
-      <div 
-        style={{
-          position: 'absolute',
-          bottom: '0',
-          left: '0',
-          right: '0',
-          backgroundColor: 'rgba(30, 30, 30, 0.85)',
-          padding: isMobile ? '8px' : '12px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          zIndex: '1000',
-          boxShadow: '0 -2px 10px rgba(0,0,0,0.3)'
-        }}
-      >
-        {/* Attribution message - hide text on mobile, just show link */}
+        {/* Footer bar with attribution and buttons - now positioned absolutely to avoid layout shifts */}
         <div 
           style={{
-            color: 'white',
-            fontWeight: 'bold',
-            fontSize: isMobile ? '14px' : '16px'
+            position: 'absolute',
+            bottom: '0',
+            left: '0',
+            right: '0',
+            backgroundColor: 'rgba(30, 30, 30, 0.85)',
+            padding: isMobile ? '8px' : '12px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            zIndex: '1000',
+            boxShadow: '0 -2px 10px rgba(0,0,0,0.3)'
           }}
         >
-          {isMobile ? (
-            <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a>
-          ) : (
-            <>Built with ♥︎ for ₿itcoin. Follow <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a></>
-          )}
-        </div>
-        
-        {/* Game control buttons */}
-        <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px' }}>
-          {/* Sound Toggle Button */}
-          <button
-            onClick={toggleSound}
+          {/* Attribution message - hide text on mobile, just show link */}
+          <div 
             style={{
-              backgroundColor: soundEnabled ? 'rgba(55, 65, 81, 0.85)' : 'rgba(239, 68, 68, 0.85)',
               color: 'white',
-              padding: isMobile ? '6px 10px' : '8px 14px',
-              borderRadius: '8px',
-              fontSize: isMobile ? '12px' : '14px',
               fontWeight: 'bold',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px'
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+              fontSize: isMobile ? '14px' : '16px'
             }}
           >
-            {isMobile ? (soundEnabled ? '🔊' : '🔇') : (soundEnabled ? '🔊 Sound On' : '🔇 Sound Off')}
-          </button>
+            {isMobile ? (
+              <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a>
+            ) : (
+              <>Built with ♥︎ for ₿itcoin. Follow <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a></>
+            )}
+          </div>
           
-          {/* High Scores Button */}
-          <button
-            id="highscores-toggle-button"
-            onClick={toggleHighScores}
-            style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.85)',
-              color: 'white',
-              padding: isMobile ? '6px 10px' : '8px 14px',
-              borderRadius: '8px',
-              fontSize: isMobile ? '12px' : '14px',
-              fontWeight: 'bold',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              zIndex: 100
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
-              e.currentTarget.style.backgroundColor = 'rgba(37, 99, 235, 0.85)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-              e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.85)';
-            }}
-          >
-            {isMobile ? '📊' : '📊 Leaderboard'}
-          </button>
+          {/* Game control buttons */}
+          <div style={{ display: 'flex', gap: isMobile ? '6px' : '10px' }}>
+            {/* Sound Toggle Button */}
+            <button
+              onClick={toggleSound}
+              style={{
+                backgroundColor: soundEnabled ? 'rgba(55, 65, 81, 0.85)' : 'rgba(239, 68, 68, 0.85)',
+                color: 'white',
+                padding: isMobile ? '6px 10px' : '8px 14px',
+                borderRadius: '8px',
+                fontSize: isMobile ? '12px' : '14px',
+                fontWeight: 'bold',
+                backdropFilter: 'blur(4px)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+              }}
+            >
+              {isMobile ? (soundEnabled ? '🔊' : '🔇') : (soundEnabled ? '🔊 Sound On' : '🔇 Sound Off')}
+            </button>
+            
+            {/* High Scores Button */}
+            <button
+              id="highscores-toggle-button"
+              onClick={toggleHighScores}
+              style={{
+                backgroundColor: 'rgba(59, 130, 246, 0.85)',
+                color: 'white',
+                padding: isMobile ? '6px 10px' : '8px 14px',
+                borderRadius: '8px',
+                fontSize: isMobile ? '12px' : '14px',
+                fontWeight: 'bold',
+                backdropFilter: 'blur(4px)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                zIndex: 100
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
+                e.currentTarget.style.backgroundColor = 'rgba(37, 99, 235, 0.85)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+                e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.85)';
+              }}
+            >
+              {isMobile ? '📊' : '📊 Leaderboard'}
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* High Scores Modal */}
-      <HighScores 
-        isOpen={isHighScoresOpen}
-        onClose={() => {
-          console.log('Closing high scores modal, setting cooldown');
-          setIsHighScoresOpen(false);
-          setModalCooldown(true); // Set cooldown when modal is closed
-          
-          // If we just showed high scores for a crash, reset the game state
-          if (gameState === 'highScoreShown' || gameState === 'crashed') {
-            setGameState('idle');
-          }
-        }}
-        currentSats={score}
-        playerHighSats={highScore}
-        onSubmit={handleHighScoreSubmit}
-      />
+        {/* High Scores Modal */}
+        <HighScores 
+          isOpen={isHighScoresOpen}
+          onClose={() => {
+            console.log('Closing high scores modal, setting cooldown');
+            setIsHighScoresOpen(false);
+            setModalCooldown(true); // Set cooldown when modal is closed
+            
+            // If we just showed high scores for a crash, reset the game state
+            if (gameState === 'highScoreShown' || gameState === 'crashed') {
+              setGameState('idle');
+            }
+          }}
+          currentSats={score}
+          playerHighSats={highScore}
+          onSubmit={handleHighScoreSubmit}
+        />
+      </div>
     </div>
   );
 };
