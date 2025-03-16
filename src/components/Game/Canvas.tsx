@@ -94,41 +94,42 @@ export const Canvas: React.FC<GameProps> = ({
   
   // Load background images
   const loadBackgroundImages = useCallback(() => {
-    const imagesLoading = {
-      sky: new Image(),
-      mountains: new Image(),
+    const imagesLoading: BackgroundImages = {
+      sky: null,
+      mountains: null,
       buildings: new Image(),
       ground: new Image()
     };
     
-    // Set image sources
-    imagesLoading.sky.src = '/images/background-sky.jpg';
-    imagesLoading.mountains.src = '/images/background-mountains.png';
-    imagesLoading.buildings.src = '/images/background-buildings.png';
-    imagesLoading.ground.src = '/images/background-ground.png';
+    // Set image sources - only load buildings and ground
+    if (imagesLoading.buildings) imagesLoading.buildings.src = '/images/background-buildings.png';
+    if (imagesLoading.ground) imagesLoading.ground.src = '/images/background-ground.png';
     
     // Pre-set dimensions to avoid layout shifts
     const imageDimensions = {
-      sky: { width: 1600, height: 600 },
-      mountains: { width: 1600, height: 300 },
-      buildings: { width: 1600, height: 250 },
+      sky: { width: 0, height: 0 },
+      mountains: { width: 0, height: 0 },
+      buildings: { width: 1600, height: 400 }, // Height to match ground level (400px)
       ground: { width: 1600, height: 200 }
     };
     
     // Pre-set dimensions to help browser rendering
     Object.keys(imagesLoading).forEach(key => {
       const img = imagesLoading[key as keyof BackgroundImages];
-      const dims = imageDimensions[key as keyof typeof imageDimensions];
-      img.width = dims.width;
-      img.height = dims.height;
-      
-      // Enable image-rendering optimization for pixel art
-      (img as any).style = 'image-rendering: pixelated;';
+      if (img) {
+        const dims = imageDimensions[key as keyof typeof imageDimensions];
+        img.width = dims.width;
+        img.height = dims.height;
+        
+        // Enable image-rendering optimization for pixel art
+        (img as any).style = 'image-rendering: pixelated;';
+      }
     });
     
     // Track loaded images
     let loadedCount = 0;
-    const totalImages = Object.keys(imagesLoading).length;
+    // We're only loading 2 images now (buildings and ground)
+    const totalImages = 2;
     
     // Create fallback images for any that fail to load
     const createFallbackImage = (key: keyof BackgroundImages) => {
@@ -142,24 +143,6 @@ export const Canvas: React.FC<GameProps> = ({
         
         // Fill with appropriate fallback pattern based on the image type
         switch(key) {
-          case 'sky':
-            ctx.fillStyle = '#87CEEB';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            break;
-          case 'mountains':
-            ctx.fillStyle = '#4B6455';
-            // Draw some triangles for mountains
-            for (let i = 0; i < 5; i++) {
-              const x = i * (canvas.width / 5);
-              const width = canvas.width / 4;
-              const height = 100 + (i % 3) * 50;
-              ctx.beginPath();
-              ctx.moveTo(x, canvas.height);
-              ctx.lineTo(x + width/2, canvas.height - height);
-              ctx.lineTo(x + width, canvas.height);
-              ctx.fill();
-            }
-            break;
           case 'buildings':
             ctx.fillStyle = '#333';
             // Draw some rectangles for buildings
@@ -184,6 +167,9 @@ export const Canvas: React.FC<GameProps> = ({
               ctx.stroke();
             }
             break;
+          default:
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
       }
       
@@ -205,24 +191,26 @@ export const Canvas: React.FC<GameProps> = ({
     };
     
     // Set up load and error handlers for each image
-    Object.keys(imagesLoading).forEach(key => {
+    ['buildings', 'ground'].forEach(key => {
       const img = imagesLoading[key as keyof BackgroundImages];
       
-      // If already loaded, count it
-      if (img.complete) {
-        checkAllLoaded();
-      } else {
-        img.onload = () => {
-          console.log(`Loaded background image: ${key}`);
+      if (img) {
+        // If already loaded, count it
+        if (img.complete) {
           checkAllLoaded();
-        };
-        
-        img.onerror = (err) => {
-          console.error(`Failed to load background image: ${key}`, err);
-          // Replace with fallback image instead of just counting it
-          imagesLoading[key as keyof BackgroundImages] = createFallbackImage(key as keyof BackgroundImages);
-          checkAllLoaded();
-        };
+        } else {
+          img.onload = () => {
+            console.log(`Loaded background image: ${key}`);
+            checkAllLoaded();
+          };
+          
+          img.onerror = (err) => {
+            console.error(`Failed to load background image: ${key}`, err);
+            // Replace with fallback image instead of just counting it
+            imagesLoading[key as keyof BackgroundImages] = createFallbackImage(key as keyof BackgroundImages);
+            checkAllLoaded();
+          };
+        }
       }
     });
   }, []);
@@ -444,15 +432,16 @@ export const Canvas: React.FC<GameProps> = ({
       // Draw initial loading screen
       const drawLoadingScreen = () => {
         try {
-          // Use ground color as base background to prevent blue sections
-          ctx.fillStyle = '#3e291e';
+          // Use dark background color as base
+          ctx.fillStyle = '#222';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           
           // Use background image for loading screen if loaded
-          if (backgroundImagesLoaded && backgroundImagesRef.current.sky) {
+          if (backgroundImagesLoaded && backgroundImagesRef.current.buildings) {
+            // Draw buildings to end at ground level (y=400)
             ctx.drawImage(
-              backgroundImagesRef.current.sky,
-              0, 0, canvas.width, canvas.height * 0.8 // Only draw sky to 80% of height
+              backgroundImagesRef.current.buildings,
+              0, 0, canvas.width, 400
             );
             
             // Draw ground if available
@@ -465,6 +454,10 @@ export const Canvas: React.FC<GameProps> = ({
               );
             }
           }
+          
+          // Semi-transparent overlay for text readability
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(canvas.width/2 - 200, 120, 400, 250);
           
           ctx.fillStyle = 'white';
           ctx.font = '24px Arial';
@@ -506,8 +499,8 @@ export const Canvas: React.FC<GameProps> = ({
       const player = new Player({
         x: 100,
         y: 300,
-        width: 30,
-        height: 60,
+        width: 60,
+        height: 120,
         speed: 200,
         jumpForce: 500,
         gravity: 1200
@@ -780,55 +773,32 @@ export const Canvas: React.FC<GameProps> = ({
           // Draw backgrounds with parallax effect
           const bgImages = backgroundImagesRef.current;
           
-          // Draw sky (fixed background)
-          if (backgroundImagesLoaded && bgImages.sky) {
-            ctx.drawImage(bgImages.sky, 0, 0, canvas.width, canvas.height * 0.8); // Only draw sky to 80% of height
-          } else {
-            // Fallback if image not loaded
-            ctx.fillStyle = '#222';
-            ctx.fillRect(0, 0, canvas.width, 400);
-          }
-          
-          // Draw distant mountains with slight parallax
-          if (backgroundImagesLoaded && bgImages.mountains) {
-            const mountainParallax = cameraOffsetRef.current * 0.2;
-            // Draw the image twice to create a seamless loop
-            ctx.drawImage(
-              bgImages.mountains,
-              -mountainParallax % bgImages.mountains.width,
-              50,
-              bgImages.mountains.width,
-              300
-            );
-            ctx.drawImage(
-              bgImages.mountains,
-              (-mountainParallax % bgImages.mountains.width) + bgImages.mountains.width,
-              50,
-              bgImages.mountains.width,
-              300
-            );
-          }
-          
-          // Draw middle-distance buildings with more parallax
+          // Use only the new background-buildings.png for the entire background
           if (backgroundImagesLoaded && bgImages.buildings) {
             const buildingParallax = cameraOffsetRef.current * 0.5;
+            
+            // Draw the buildings image to end at ground level (y=400)
             // Draw the image twice to create a seamless loop
             ctx.drawImage(
               bgImages.buildings,
               -buildingParallax % bgImages.buildings.width,
-              150,
+              0, // Start from the top of the canvas
               bgImages.buildings.width,
-              250
+              400 // End at the ground level (y=400)
             );
             ctx.drawImage(
               bgImages.buildings,
               (-buildingParallax % bgImages.buildings.width) + bgImages.buildings.width,
-              150,
+              0, // Start from the top of the canvas
               bgImages.buildings.width,
-              250
+              400 // End at the ground level (y=400)
             );
           } else {
-            // Fallback if image not loaded - draw some buildings
+            // Fallback if image not loaded
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw some simple buildings as fallback
             ctx.fillStyle = '#333';
             for (let i = 0; i < 5; i++) {
               const buildingX = ((i * 200) - ((cameraOffsetRef.current * 0.5) % 200));
@@ -929,6 +899,14 @@ export const Canvas: React.FC<GameProps> = ({
             // Semi-transparent overlay
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Game over panel with border
+            ctx.fillStyle = 'rgba(20, 20, 20, 0.9)';
+            ctx.fillRect(canvas.width/2 - 200, 100, 400, 250);
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(canvas.width/2 - 200, 100, 400, 250);
             
             // Game over title
             ctx.fillStyle = 'white';

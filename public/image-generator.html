@@ -2,540 +2,388 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Game Image Generator</title>
+  <title>Skateboarder Sprite Generator (Bitcoin Head)</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      background: #f5f5f5;
-    }
-    h1 {
+      font-family: sans-serif;
+      background: #eee;
+      margin: 20px;
       text-align: center;
-      color: #333;
     }
-    .canvas-container {
+    #controls {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 20px;
+      display: inline-block;
+      text-align: left;
+    }
+    #canvases {
       display: flex;
       flex-wrap: wrap;
-      gap: 20px;
       justify-content: center;
-      margin-bottom: 30px;
+      gap: 20px;
     }
-    .image-item {
-      text-align: center;
-      background: white;
-      padding: 15px;
-      border-radius: 5px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    .canvas-container {
+      background: #fff;
+      padding: 10px;
+      border: 1px solid #aaa;
+      box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
     }
     canvas {
-      border: 1px solid #ddd;
+      background: transparent;
       display: block;
-      margin-bottom: 10px;
+      margin: 0 auto;
+      border: 1px solid #ddd;
     }
     button {
-      background: #4CAF50;
-      color: white;
-      border: none;
-      padding: 10px 15px;
-      border-radius: 4px;
+      margin-top: 5px;
+      padding: 4px 8px;
       cursor: pointer;
-      font-size: 14px;
-      margin-top: 10px;
-    }
-    button:hover {
-      background: #45a049;
-    }
-    .instructions {
-      background: #fff;
-      padding: 20px;
-      border-radius: 5px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
   </style>
 </head>
 <body>
-  <h1>Game Image Generator</h1>
-  
-  <div class="instructions">
-    <h2>Instructions</h2>
-    <p>This page generates simple placeholder images for your game. For each image:</p>
-    <ol>
-      <li>Right-click on the image</li>
-      <li>Select "Save Image As..."</li>
-      <li>Save with the exact filename shown under each image</li>
-      <li>Place all saved images in the <code>/public/images/</code> directory</li>
-    </ol>
+  <h1>Skateboarder Sprite Generator (Bitcoin Head)</h1>
+  <div id="controls">
+    <div>
+      <label for="bodyColor">Body Color:</label>
+      <input type="color" id="bodyColor" value="#1E90FF">
+    </div>
+    <div>
+      <label for="outlineColor">Outline Color:</label>
+      <input type="color" id="outlineColor" value="#000000">
+    </div>
+    <div>
+      <input type="checkbox" id="gridToggle">
+      <label for="gridToggle">Show Pixel Grid</label>
+    </div>
+    <div style="margin-top:10px;">
+      <button id="downloadAll">Download All</button>
+    </div>
   </div>
-  
-  <h2>Player Images</h2>
-  <div class="canvas-container" id="player-container"></div>
-  
-  <h2>Skateboard</h2>
-  <div class="canvas-container" id="skateboard-container"></div>
-  
-  <h2>Obstacles</h2>
-  <div class="canvas-container" id="obstacles-container"></div>
-  
-  <h2>Background</h2>
-  <div class="canvas-container" id="background-container"></div>
-  
+
+  <div id="canvases">
+    <!-- SIX Character Poses -->
+    <div class="canvas-container">
+      <h3>player-idle.png (120×240)</h3>
+      <canvas id="canvasIdle" width="120" height="240"></canvas>
+      <br>
+      <button onclick="downloadCanvas('canvasIdle', 'player-idle.png')">Download</button>
+    </div>
+    <div class="canvas-container">
+      <h3>player-skating.png (120×240)</h3>
+      <canvas id="canvasSkating" width="120" height="240"></canvas>
+      <br>
+      <button onclick="downloadCanvas('canvasSkating', 'player-skating.png')">Download</button>
+    </div>
+    <div class="canvas-container">
+      <h3>player-jumping.png (120×240)</h3>
+      <canvas id="canvasJumping" width="120" height="240"></canvas>
+      <br>
+      <button onclick="downloadCanvas('canvasJumping', 'player-jumping.png')">Download</button>
+    </div>
+    <div class="canvas-container">
+      <h3>player-falling.png (120×240)</h3>
+      <canvas id="canvasFalling" width="120" height="240"></canvas>
+      <br>
+      <button onclick="downloadCanvas('canvasFalling', 'player-falling.png')">Download</button>
+    </div>
+    <div class="canvas-container">
+      <h3>player-grinding.png (120×240)</h3>
+      <canvas id="canvasGrinding" width="120" height="240"></canvas>
+      <br>
+      <button onclick="downloadCanvas('canvasGrinding', 'player-grinding.png')">Download</button>
+    </div>
+    <div class="canvas-container">
+      <h3>player-crashed.png (120×240)</h3>
+      <canvas id="canvasCrashed" width="120" height="240"></canvas>
+      <br>
+      <button onclick="downloadCanvas('canvasCrashed', 'player-crashed.png')">Download</button>
+    </div>
+    <!-- Skateboard Image -->
+    <div class="canvas-container">
+      <h3>skateboard.png (100×20)</h3>
+      <canvas id="canvasSkateboard" width="100" height="20"></canvas>
+      <br>
+      <button onclick="downloadCanvas('canvasSkateboard', 'skateboard.png')">Download</button>
+    </div>
+  </div>
+
   <script>
-    // Configuration for all images
-    const images = [
-      // Player images
-      { 
-        container: 'player-container',
-        images: [
-          { name: 'player-idle.png', width: 60, height: 120, draw: drawPlayerIdle },
-          { name: 'player-skating.png', width: 60, height: 120, draw: drawPlayerSkating },
-          { name: 'player-jumping.png', width: 60, height: 120, draw: drawPlayerJumping },
-          { name: 'player-falling.png', width: 60, height: 120, draw: drawPlayerFalling },
-          { name: 'player-grinding.png', width: 60, height: 120, draw: drawPlayerGrinding },
-          { name: 'player-crashed.png', width: 60, height: 120, draw: drawPlayerCrashed }
-        ]
-      },
-      // Skateboard
-      {
-        container: 'skateboard-container',
-        images: [
-          { name: 'skateboard.png', width: 50, height: 10, draw: drawSkateboard }
-        ]
-      },
-      // Obstacles
-      {
-        container: 'obstacles-container',
-        images: [
-          { name: 'obstacle-box.png', width: 50, height: 50, draw: drawObstacleBox },
-          { name: 'obstacle-ramp.png', width: 70, height: 60, draw: drawObstacleRamp },
-          { name: 'obstacle-rail.png', width: 100, height: 20, draw: drawObstacleRail }
-        ]
-      },
-      // Background
-      {
-        container: 'background-container',
-        images: [
-          { name: 'background-sky.jpg', width: 800, height: 500, draw: drawBackgroundSky },
-          { name: 'background-mountains.png', width: 800, height: 300, draw: drawBackgroundMountains },
-          { name: 'background-buildings.png', width: 800, height: 250, draw: drawBackgroundBuildings },
-          { name: 'background-ground.png', width: 800, height: 100, draw: drawBackgroundGround }
-        ]
-      }
-    ];
-    
-    // Draw all images
-    images.forEach(category => {
-      const container = document.getElementById(category.container);
-      
-      category.images.forEach(img => {
-        const div = document.createElement('div');
-        div.className = 'image-item';
-        
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          img.draw(ctx, img.width, img.height);
-        }
-        
-        const label = document.createElement('div');
-        label.textContent = img.name;
-        
-        div.appendChild(canvas);
-        div.appendChild(label);
-        
-        // Add download button
-        const button = document.createElement('button');
-        button.textContent = 'Download';
-        button.onclick = () => {
-          const link = document.createElement('a');
-          link.download = img.name;
-          link.href = canvas.toDataURL(img.name.endsWith('.jpg') ? 'image/jpeg' : 'image/png');
-          link.click();
-        };
-        div.appendChild(button);
-        
-        container.appendChild(div);
-      });
-    });
-    
-    // Drawing functions for player states
-    function drawPlayerIdle(ctx, width, height) {
-      // Base color
-      ctx.fillStyle = '#3498db';
-      
-      // Body
-      ctx.fillRect(width/2 - 10, height/2 - 20, 20, 60);
-      
-      // Head
-      ctx.beginPath();
-      ctx.arc(width/2, height/2 - 35, 15, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Arms
-      ctx.fillRect(width/2 - 25, height/2 - 15, 15, 8);
-      ctx.fillRect(width/2 + 10, height/2 - 15, 15, 8);
-      
-      // Legs
-      ctx.fillRect(width/2 - 8, height/2 + 40, 7, 20);
-      ctx.fillRect(width/2 + 1, height/2 + 40, 7, 20);
+    /************************************************************
+     * 1. Embedded Bitcoin Logo (40×40 px) as Base64 PNG
+     *    Make sure this string is a single line with no typos.
+     ************************************************************/
+    //const BITCOIN_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAAACXBIWXMAAAsTAAALEwEAmpwYAAAB00lEQVR4nO3WMU7DQBjG4RGk00CKACVW2dQc6hgTR8kaHeZb05PlDJmyE5MWcXK6Fv60PNfAZ/s2nKn6lZdc/rRxTJCIbPUfH33chCTdGvGUk+Q2ejyR4Z6aCDcQk2fOylR9IGz7wIQwD1HAOyx4I+M4f0jEZ6IHZ6Y4HFIF8KcDXJ+HEIF8HcLvEAEPCEk2B1boI/om+Bo5ky7zH8gE4NRpg75Eok/Q2dLCKXdv9nYNoKlq3rhD6CGLwHD/JCvmXvoLE9Sc3ctMPQZSRt4U6yR/zQgDB4OpnLeDgZ/gFzVX4NY1BEnwAAAABJRU5ErkJggg==";
+
+    // We'll load it once and reuse it for all canvases.
+    const btcImage = new Image();
+
+    // Add an error handler to see if there's a load problem.
+    btcImage.onerror = function(e) {
+      console.error("Error loading Bitcoin logo image:", e);
+    };
+    btcImage.onload = function() {
+      console.log("Bitcoin logo loaded successfully.");
+      generateAll();
+    };
+    btcImage.src = "bitcoin-logo.png";
+
+    /************************************************************
+     * 2. Global Configuration and Utility
+     ************************************************************/
+    function getOptions() {
+      return {
+        bodyColor: document.getElementById('bodyColor').value,
+        outlineColor: document.getElementById('outlineColor').value,
+        showGrid: document.getElementById('gridToggle').checked
+      };
     }
-    
-    function drawPlayerSkating(ctx, width, height) {
-      // Base color
-      ctx.fillStyle = '#3498db';
-      
-      // Body - leaning forward
-      ctx.fillRect(width/2 - 12, height/2 - 20, 20, 55);
-      
-      // Head
-      ctx.beginPath();
-      ctx.arc(width/2 - 5, height/2 - 35, 15, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Arms - one forward, one back
-      ctx.fillRect(width/2 - 30, height/2 - 20, 18, 7);
-      ctx.fillRect(width/2 + 8, height/2 - 10, 15, 7);
-      
-      // Legs - one bent, one extended
-      ctx.fillRect(width/2 - 10, height/2 + 35, 7, 20);
-      ctx.fillRect(width/2, height/2 + 35, 7, 15);
-    }
-    
-    function drawPlayerJumping(ctx, width, height) {
-      // Base color
-      ctx.fillStyle = '#2ecc71';
-      
-      // Body - slightly bent
-      ctx.fillRect(width/2 - 10, height/2 - 25, 20, 45);
-      
-      // Head
-      ctx.beginPath();
-      ctx.arc(width/2, height/2 - 40, 15, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Arms - extended for balance
-      ctx.fillRect(width/2 - 30, height/2 - 25, 20, 7);
-      ctx.fillRect(width/2 + 10, height/2 - 25, 20, 7);
-      
-      // Legs - both bent up
-      ctx.fillRect(width/2 - 15, height/2 + 20, 10, 15);
-      ctx.fillRect(width/2 + 5, height/2 + 20, 10, 15);
-    }
-    
-    function drawPlayerFalling(ctx, width, height) {
-      // Base color
-      ctx.fillStyle = '#2ecc71';
-      
-      // Body - at an angle
+
+    function drawGrid(ctx, width, height) {
       ctx.save();
-      ctx.translate(width/2, height/2);
-      ctx.rotate(Math.PI * 0.1);
-      ctx.fillRect(-10, -30, 20, 50);
-      ctx.restore();
-      
-      // Head
-      ctx.beginPath();
-      ctx.arc(width/2 + 5, height/2 - 35, 15, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Arms - flailing
-      ctx.fillRect(width/2 - 15, height/2 - 15, 15, 8);
-      ctx.fillRect(width/2 + 15, height/2 - 10, 20, 8);
-      
-      // Legs - extended for landing
-      ctx.fillRect(width/2 - 5, height/2 + 20, 8, 30);
-      ctx.fillRect(width/2 + 8, height/2 + 15, 8, 25);
-    }
-    
-    function drawPlayerGrinding(ctx, width, height) {
-      // Base color
-      ctx.fillStyle = '#f1c40f';
-      
-      // Body - low stance
-      ctx.fillRect(width/2 - 10, height/2 - 15, 20, 45);
-      
-      // Head
-      ctx.beginPath();
-      ctx.arc(width/2, height/2 - 30, 15, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Arms - for balance
-      ctx.fillRect(width/2 - 25, height/2 - 10, 15, 7);
-      ctx.fillRect(width/2 + 10, height/2 - 10, 15, 7);
-      
-      // Legs - wide stance
-      ctx.fillRect(width/2 - 18, height/2 + 30, 10, 15);
-      ctx.fillRect(width/2 + 8, height/2 + 30, 10, 15);
-      
-      // Sparks
-      ctx.fillStyle = '#fff';
-      for (let i = 0; i < 5; i++) {
-        const x = width/2 - 5 + Math.random() * 30;
-        const y = height - 5 - Math.random() * 10;
-        const size = 1 + Math.random() * 2;
+      ctx.strokeStyle = "rgba(0,0,0,0.15)";
+      ctx.lineWidth = 0.5;
+      for (let x = 0; x <= width; x += 10) {
         ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    
-    function drawPlayerCrashed(ctx, width, height) {
-      // Base color
-      ctx.fillStyle = '#e74c3c';
-      
-      // Body - fallen
-      ctx.save();
-      ctx.translate(width/2, height - 20);
-      ctx.rotate(Math.PI * 0.3);
-      ctx.fillRect(-25, -10, 50, 20);
-      ctx.restore();
-      
-      // Head
-      ctx.beginPath();
-      ctx.arc(width/2 - 15, height - 35, 15, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Arms - awkward positions
-      ctx.fillRect(width/2 - 5, height - 40, 20, 8);
-      ctx.fillRect(width/2 - 30, height - 20, 15, 8);
-      
-      // Legs - tangled
-      ctx.fillRect(width/2 + 10, height - 25, 8, 20);
-      ctx.fillRect(width/2 + 5, height - 15, 20, 8);
-      
-      // Stars/dizziness
-      ctx.fillStyle = '#fff';
-      for (let i = 0; i < 3; i++) {
-        const x = width/2 - 25 + Math.random() * 20;
-        const y = height - 50 - Math.random() * 15;
-        ctx.beginPath();
-        ctx.arc(x, y, 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    
-    // Drawing function for skateboard
-    function drawSkateboard(ctx, width, height) {
-      // Deck
-      ctx.fillStyle = '#222';
-      ctx.fillRect(0, 0, width, height);
-      
-      // Grip tape pattern
-      ctx.fillStyle = '#111';
-      for (let i = 2; i < width - 2; i += 3) {
-        ctx.fillRect(i, 1, 1, height - 2);
-      }
-      
-      // Wheels
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(5, height, 4, 2);
-      ctx.fillRect(width - 9, height, 4, 2);
-    }
-    
-    // Drawing functions for obstacles
-    function drawObstacleBox(ctx, width, height) {
-      // Box
-      ctx.fillStyle = '#8B4513';
-      ctx.fillRect(0, 0, width, height);
-      
-      // Texture/details
-      ctx.strokeStyle = '#5d2906';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(3, 3, width - 6, height - 6);
-      
-      // Text
-      ctx.fillStyle = '#5d2906';
-      ctx.font = '10px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('BOX', width/2, height/2 + 4);
-    }
-    
-    function drawObstacleRamp(ctx, width, height) {
-      // Ramp shape
-      ctx.fillStyle = '#32CD32';
-      ctx.beginPath();
-      ctx.moveTo(0, height);
-      ctx.lineTo(width, 0);
-      ctx.lineTo(width, height);
-      ctx.closePath();
-      ctx.fill();
-      
-      // Texture lines
-      ctx.strokeStyle = '#228B22';
-      ctx.lineWidth = 1;
-      for (let i = 10; i < width; i += 10) {
-        const y = height - (i / width) * height;
-        ctx.beginPath();
-        ctx.moveTo(i, height);
-        ctx.lineTo(i, y);
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
         ctx.stroke();
       }
-    }
-    
-    function drawObstacleRail(ctx, width, height) {
-      // Rail top
-      ctx.fillStyle = '#4682B4';
-      ctx.fillRect(0, 0, width, height/2);
-      
-      // Rail bottom
-      ctx.fillStyle = '#36648B';
-      ctx.fillRect(0, height/2, width, height/2);
-      
-      // Rail supports
-      ctx.fillStyle = '#2C3E50';
-      const supportWidth = 5;
-      const supportHeight = 10;
-      for (let x = 15; x < width - 15; x += 30) {
-        ctx.fillRect(x - supportWidth/2, height, supportWidth, supportHeight);
-      }
-      
-      // Shine
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, 2);
-      ctx.lineTo(width, 2);
-      ctx.stroke();
-    }
-    
-    // Drawing functions for background
-    function drawBackgroundSky(ctx, width, height) {
-      // Sky gradient
-      const gradient = ctx.createLinearGradient(0, 0, 0, height);
-      gradient.addColorStop(0, '#1e90ff');
-      gradient.addColorStop(1, '#87CEEB');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, height);
-      
-      // Sun
-      ctx.fillStyle = '#FFD700';
-      ctx.beginPath();
-      ctx.arc(width * 0.75, height * 0.2, 40, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Clouds
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      drawCloud(ctx, width * 0.2, height * 0.15, 40);
-      drawCloud(ctx, width * 0.5, height * 0.25, 30);
-      drawCloud(ctx, width * 0.8, height * 0.1, 35);
-    }
-    
-    function drawCloud(ctx, x, y, size) {
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.arc(x + size * 0.8, y - size * 0.2, size * 0.6, 0, Math.PI * 2);
-      ctx.arc(x + size * 1.5, y, size * 0.8, 0, Math.PI * 2);
-      ctx.arc(x + size * 0.5, y + size * 0.3, size * 0.7, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    
-    function drawBackgroundMountains(ctx, width, height) {
-      ctx.clearRect(0, 0, width, height);
-      
-      // Draw mountains
-      ctx.fillStyle = '#4b6043';
-      
-      // First mountain range
-      ctx.beginPath();
-      ctx.moveTo(0, height);
-      ctx.lineTo(0, height * 0.6);
-      
-      // Create random mountain peaks
-      for (let x = 0; x < width; x += 50) {
-        const peakHeight = height * (0.3 + Math.random() * 0.3);
-        ctx.lineTo(x, height - peakHeight);
-      }
-      
-      ctx.lineTo(width, height * 0.7);
-      ctx.lineTo(width, height);
-      ctx.closePath();
-      ctx.fill();
-      
-      // Second mountain range (darker)
-      ctx.fillStyle = '#374B30';
-      ctx.beginPath();
-      ctx.moveTo(0, height);
-      ctx.lineTo(0, height * 0.7);
-      
-      // Create random mountain peaks
-      for (let x = 0; x < width; x += 70) {
-        const peakHeight = height * (0.2 + Math.random() * 0.2);
-        ctx.lineTo(x, height - peakHeight);
-      }
-      
-      ctx.lineTo(width, height * 0.8);
-      ctx.lineTo(width, height);
-      ctx.closePath();
-      ctx.fill();
-    }
-    
-    function drawBackgroundBuildings(ctx, width, height) {
-      ctx.clearRect(0, 0, width, height);
-      
-      // Draw city skyline
-      ctx.fillStyle = '#2C3E50';
-      
-      // Create random buildings
-      let x = 0;
-      while (x < width) {
-        const buildingWidth = 30 + Math.random() * 70;
-        const buildingHeight = 50 + Math.random() * (height - 50);
-        
-        ctx.fillRect(x, height - buildingHeight, buildingWidth, buildingHeight);
-        
-        // Add some windows
-        ctx.fillStyle = '#FFEB3B';
-        const windowSize = 3;
-        const windowSpacing = 10;
-        
-        for (let wx = x + 10; wx < x + buildingWidth - 10; wx += windowSpacing) {
-          for (let wy = height - buildingHeight + 15; wy < height - 10; wy += windowSpacing) {
-            // Only draw some windows (random pattern)
-            if (Math.random() > 0.5) {
-              ctx.fillRect(wx, wy, windowSize, windowSize);
-            }
-          }
-        }
-        
-        x += buildingWidth;
-        ctx.fillStyle = '#2C3E50';
-      }
-    }
-    
-    function drawBackgroundGround(ctx, width, height) {
-      // Ground gradient
-      const gradient = ctx.createLinearGradient(0, 0, 0, height);
-      gradient.addColorStop(0, '#3e291e');
-      gradient.addColorStop(1, '#2c1a13');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, height);
-      
-      // Ground texture
-      ctx.strokeStyle = '#2c1a13';
-      ctx.lineWidth = 1;
-      
-      // Horizontal lines
-      for (let y = 10; y < height; y += 15) {
+      for (let y = 0; y <= height; y += 10) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
         ctx.stroke();
       }
-      
-      // Vertical lines for a grid effect
-      for (let x = 0; x < width; x += 50) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x + 25, height);
-        ctx.stroke();
-      }
+      ctx.restore();
     }
+
+    function downloadCanvas(canvasId, filename) {
+      const canvas = document.getElementById(canvasId);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    }
+
+    document.getElementById('downloadAll').addEventListener('click', function() {
+      const files = [
+        {id: 'canvasIdle', name: 'player-idle.png'},
+        {id: 'canvasSkating', name: 'player-skating.png'},
+        {id: 'canvasJumping', name: 'player-jumping.png'},
+        {id: 'canvasFalling', name: 'player-falling.png'},
+        {id: 'canvasGrinding', name: 'player-grinding.png'},
+        {id: 'canvasCrashed', name: 'player-crashed.png'},
+        {id: 'canvasSkateboard', name: 'skateboard.png'}
+      ];
+      files.forEach(f => downloadCanvas(f.id, f.name));
+    });
+
+    /************************************************************
+     * 3. Base Drawing Functions (Torso, Arms, Legs)
+     *    The "head" is replaced with the Bitcoin logo.
+     ************************************************************/
+    // Instead of drawing a circle, we draw the Bitcoin logo (40×40).
+    function drawHead(ctx, centerX, centerY) {
+      // We shift left/up by 20 so it’s centered at (centerX, centerY).
+      ctx.drawImage(btcImage, centerX - 20, centerY - 20, 40, 40);
+    }
+
+    // Torso (40px wide × 70px tall)
+    function drawTorso(ctx, x, y, options) {
+      ctx.save();
+      ctx.fillStyle = options.bodyColor;
+      ctx.fillRect(x, y, 40, 70);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = options.outlineColor;
+      ctx.strokeRect(x, y, 40, 70);
+      ctx.restore();
+    }
+
+    // Arm as a line
+    function drawArm(ctx, startX, startY, endX, endY, options) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = options.outlineColor;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Legs in two segments, each 55px.
+    function drawLeg(ctx, hipX, hipY, offsetX, upperAngle, lowerAngle, options) {
+      const L1 = 55, L2 = 55;
+      const startX = hipX + offsetX;
+      const startY = hipY;
+      const rad1 = upperAngle * Math.PI / 180;
+      const kneeX = startX + L1 * Math.cos(rad1);
+      const kneeY = startY + L1 * Math.sin(rad1);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(kneeX, kneeY);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = options.outlineColor;
+      ctx.stroke();
+
+      const rad2 = lowerAngle * Math.PI / 180;
+      const footX = kneeX + L2 * Math.cos(rad2);
+      const footY = kneeY + L2 * Math.sin(rad2);
+      ctx.beginPath();
+      ctx.moveTo(kneeX, kneeY);
+      ctx.lineTo(footX, footY);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    /************************************************************
+     * 4. Pose Drawing Functions
+     ************************************************************/
+    function drawIdle(ctx, options) {
+      ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
+      if(options.showGrid) drawGrid(ctx, ctx.canvas.width, ctx.canvas.height);
+      drawHead(ctx, 60, 20);
+      drawTorso(ctx, 40, 40, options);
+      // Arms
+      drawArm(ctx, 40, 50, 40, 90, options);
+      drawArm(ctx, 80, 50, 80, 90, options);
+      // Legs
+      drawLeg(ctx, 60, 110, -5, 95, 95, options);
+      drawLeg(ctx, 60, 110, 5, 85, 85, options);
+    }
+
+    function drawSkating(ctx, options) {
+      ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
+      if(options.showGrid) drawGrid(ctx, ctx.canvas.width, ctx.canvas.height);
+      const shift = 3;
+      drawHead(ctx, 60+shift, 20);
+      drawTorso(ctx, 40+shift, 40, options);
+      // Arms
+      drawArm(ctx, 40+shift, 50, 35+shift, 80, options);
+      drawArm(ctx, 80+shift, 50, 95+shift, 80, options);
+      // Legs
+      drawLeg(ctx, 60+shift, 110, -5, 70, 80, options);
+      drawLeg(ctx, 60+shift, 110, 5, 110, 120, options);
+    }
+
+    function drawJumping(ctx, options) {
+      ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
+      if(options.showGrid) drawGrid(ctx, ctx.canvas.width, ctx.canvas.height);
+      const yOffset = -20;
+      drawHead(ctx, 60, 20 + yOffset);
+      drawTorso(ctx, 40, 40 + yOffset, options);
+      // Arms
+      drawArm(ctx, 40, 50 + yOffset, 20, 50 + yOffset, options);
+      drawArm(ctx, 80, 50 + yOffset, 100, 50 + yOffset, options);
+      // Legs
+      drawLeg(ctx, 60, 110 + yOffset, -5, 40, 150, options);
+      drawLeg(ctx, 60, 110 + yOffset, 5, 40, 150, options);
+    }
+
+    function drawFalling(ctx, options) {
+      ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
+      if(options.showGrid) drawGrid(ctx, ctx.canvas.width, ctx.canvas.height);
+      ctx.save();
+      ctx.translate(60, 75);
+      ctx.rotate(15 * Math.PI / 180);
+      ctx.translate(-60, -75);
+      drawHead(ctx, 60, 20);
+      drawTorso(ctx, 40, 40, options);
+      // Arms
+      drawArm(ctx, 40, 50, 20, 50, options);
+      drawArm(ctx, 80, 50, 100, 50, options);
+      // Legs
+      drawLeg(ctx, 60, 110, -5, 90, 90, options);
+      drawLeg(ctx, 60, 110, 5, 90, 90, options);
+      ctx.restore();
+    }
+
+    function drawGrinding(ctx, options) {
+      ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
+      if(options.showGrid) drawGrid(ctx, ctx.canvas.width, ctx.canvas.height);
+      const yOffset = 10;
+      drawHead(ctx, 60, 20 + yOffset);
+      drawTorso(ctx, 40, 40 + yOffset, options);
+      // Arms
+      drawArm(ctx, 40, 50 + yOffset, 20, 65 + yOffset, options);
+      drawArm(ctx, 80, 50 + yOffset, 100, 65 + yOffset, options);
+      // Legs
+      drawLeg(ctx, 60, 110 + yOffset, -5, 120, 150, options);
+      drawLeg(ctx, 60, 110 + yOffset, 5, 60, 30, options);
+    }
+
+    function drawCrashed(ctx, options) {
+      ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
+      if(options.showGrid) drawGrid(ctx, ctx.canvas.width, ctx.canvas.height);
+      ctx.save();
+      ctx.translate(60, 110);
+      ctx.rotate(20 * Math.PI / 180);
+      ctx.translate(-60, -110);
+      drawHead(ctx, 60, 20);
+      drawTorso(ctx, 40, 40, options);
+      // Arms
+      drawArm(ctx, 40, 50, 10, 50, options);
+      drawArm(ctx, 80, 50, 110, 50, options);
+      // Legs
+      drawLeg(ctx, 60, 110, -5, 170, 170, options);
+      drawLeg(ctx, 60, 110, 5, 10, 10, options);
+      ctx.restore();
+    }
+
+    // Skateboard
+    function drawSkateboard(ctx, options) {
+      ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
+      if(options.showGrid) drawGrid(ctx, ctx.canvas.width, ctx.canvas.height);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(5, 5);
+      ctx.lineTo(95, 5);
+      ctx.lineTo(95, 15);
+      ctx.lineTo(5, 15);
+      ctx.closePath();
+      ctx.fillStyle = options.bodyColor;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = options.outlineColor;
+      ctx.stroke();
+      // Wheels
+      ctx.beginPath();
+      ctx.arc(25, 15, 2, 0, Math.PI*2);
+      ctx.arc(75, 15, 2, 0, Math.PI*2);
+      ctx.fillStyle = options.outlineColor;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    /************************************************************
+     * 5. Main Generate Function
+     ************************************************************/
+    function generateAll() {
+      const options = getOptions();
+      // If the BTC image isn't loaded yet, skip drawing
+      if (!btcImage.complete) {
+        console.log("Bitcoin logo not loaded yet, skipping draw...");
+        return;
+      }
+      drawIdle(document.getElementById('canvasIdle').getContext('2d'), options);
+      drawSkating(document.getElementById('canvasSkating').getContext('2d'), options);
+      drawJumping(document.getElementById('canvasJumping').getContext('2d'), options);
+      drawFalling(document.getElementById('canvasFalling').getContext('2d'), options);
+      drawGrinding(document.getElementById('canvasGrinding').getContext('2d'), options);
+      drawCrashed(document.getElementById('canvasCrashed').getContext('2d'), options);
+
+      // Skateboard
+      drawSkateboard(document.getElementById('canvasSkateboard').getContext('2d'), options);
+    }
+
+    // Re-generate on color or grid changes
+    document.getElementById('bodyColor').addEventListener('input', generateAll);
+    document.getElementById('outlineColor').addEventListener('input', generateAll);
+    document.getElementById('gridToggle').addEventListener('change', generateAll);
   </script>
 </body>
-</html> 
+</html>
