@@ -253,12 +253,17 @@ const HighScores: React.FC<HighScoresProps> = ({
         
         console.log('Score submission response status:', response.status);
         
-        if (!response.ok) {
-          throw new Error('Failed to submit high score');
-        }
-        
+        // Get the response data even if it's an error
         const data = await response.json();
         console.log('Score submission response data:', data);
+        
+        if (!response.ok) {
+          // Show specific error message from the API if available
+          if (data && data.error) {
+            throw new Error(`Server error: ${data.error}`);
+          }
+          throw new Error(`Failed to submit high score (HTTP ${response.status})`);
+        }
         
         // Update global scores with the response
         if (data.topScores) {
@@ -281,7 +286,8 @@ const HighScores: React.FC<HighScoresProps> = ({
       
     } catch (err) {
       console.error('Error submitting high score:', err);
-      setError('Failed to submit your score. Please try again later.');
+      // Set a more descriptive error message
+      setError(`Failed to submit your score: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setSubmitting(false);
     }
@@ -300,21 +306,40 @@ const HighScores: React.FC<HighScoresProps> = ({
   };
 
   // Helper function to generate a hash for score verification
-  // This is a simplified version and not cryptographically secure
-  // In a real app, you would use a more secure method
+  // This matches the server-side implementation
   const generateScoreHash = async (score: number, deviceId: string, timestamp: string) => {
-    // In a real app, this would use crypto APIs and match server implementation
-    // For this demo, we're using a simple concatenation as a placeholder
-    const data = `${score}:${deviceId}:${timestamp}`;
+    // Secret key must match the one used on the server
+    const SATS_SECRET_KEY = 'skatewithbitcoin-secure-score-key-do-not-share';
     
-    // Convert to a simple hash
-    let hash = 0;
-    for (let i = 0; i < data.length; i++) {
-      hash = ((hash << 5) - hash) + data.charCodeAt(i);
-      hash |= 0; // Convert to 32bit integer
+    // Create the same data string format as server
+    const data = `${score}:${deviceId}:${timestamp}:${SATS_SECRET_KEY}`;
+    
+    // Use the SubtleCrypto API to generate a SHA-256 hash
+    try {
+      // Convert the string to an array buffer
+      const encoder = new TextEncoder();
+      const dataBuffer = encoder.encode(data);
+      
+      // Generate SHA-256 hash
+      const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+      
+      // Convert hash to hex string
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      return hashHex;
+    } catch (error) {
+      console.error('Error generating score hash:', error);
+      
+      // Fallback for browsers without SubtleCrypto API
+      // This is less secure but better than nothing
+      let hash = 0;
+      for (let i = 0; i < data.length; i++) {
+        hash = ((hash << 5) - hash) + data.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash).toString(16).padStart(8, '0');
     }
-    
-    return Math.abs(hash).toString(16);
   };
 
   const formatDate = (dateString: string) => {
@@ -588,6 +613,37 @@ const HighScores: React.FC<HighScoresProps> = ({
                     {submitting ? 'Submitting...' : 'Submit Sats'}
                   </button>
                 </form>
+                
+                {/* Error message display */}
+                {error && (
+                  <div style={{
+                    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                    border: '1px solid rgba(220, 38, 38, 0.3)',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    marginTop: '16px',
+                    color: '#ef4444',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}>
+                    <p style={{ margin: 0 }}>{error}</p>
+                    <button 
+                      onClick={() => setError(null)}
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        color: '#ef4444',
+                        padding: '4px 0',
+                        marginTop: '8px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             
