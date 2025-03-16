@@ -362,7 +362,7 @@ export default class ObstacleManager {
   private initialObstacleDelay: number = 8000; // Delay first obstacle by 8 seconds (increased from 5s)
   private easyModeTimer: number = 20000; // Easy mode for first 20 seconds (increased from 18s)
   private firstObstacleSpawned: boolean = false; // Track if we've spawned the first obstacle
-  private secondObstacleDelay: number = 4000; // Extra delay for the second obstacle
+  private secondObstacleDelay: number = 6000; // Extra delay for the second obstacle (increased from 4000)
   private obstacleCountInEasyMode: number = 0; // Track how many obstacles we've spawned in easy mode
   
   constructor() {
@@ -554,23 +554,26 @@ export default class ObstacleManager {
         // Calculate final spawn rate with all factors
         let finalSpawnRate = adjustedBaseRate + randomVariance + difficultyBuffer;
         
-        // Significantly slower obstacles at the very beginning
-        if (this.totalGameTime < this.easyModeTimer) {
-          // Add an additional delay that decreases as game time increases
-          const startBonus = Math.max(0, (this.easyModeTimer - this.totalGameTime) / 2);
-          finalSpawnRate += startBonus;
-          
-          // Extra delay for the first few obstacles
-          if (this.obstacleCountInEasyMode < 3) {
-            finalSpawnRate += (3 - this.obstacleCountInEasyMode) * 1500;
-          }
+        // Add a start buffer to the first few obstacles
+        const startBonus = Math.max(0, 10000 - this.totalGameTime) * 0.5; // More conservative bonus
+        finalSpawnRate += startBonus;
+        
+        // Add additional spacing for the first few obstacles in easy mode
+        if (this.obstacleCountInEasyMode < 4 && this.totalGameTime < this.easyModeTimer) {
+          // Significant additional delay between early obstacles
+          const earlyGameModifier = 3000 - (this.obstacleCountInEasyMode * 500);
+          finalSpawnRate += earlyGameModifier;
+          console.log(`Early game modifier: +${earlyGameModifier}ms (obstacle #${this.obstacleCountInEasyMode + 1})`);
         }
         
-        // Special handling for first two obstacles
+        // First obstacle needs significant delay
         if (!this.firstObstacleSpawned) {
           finalSpawnRate = this.initialObstacleDelay;
+          console.log("Setting delay for first obstacle");
         } else if (this.obstacleCountInEasyMode === 1) {
+          // Second obstacle also needs extra delay
           finalSpawnRate += this.secondObstacleDelay;
+          console.log("Adding delay for second obstacle");
         }
         
         // Minimum reaction time decreases with speed - more aggressive
@@ -578,25 +581,23 @@ export default class ObstacleManager {
         let safeSpawnRate = Math.max(minReactionTime, finalSpawnRate);
         
         // Occasionally force earlier spawn for rapid succession (after 10 seconds)
-        let rapidSuccession = false;
-        
-        // Rapid succession appears after 15 seconds now (was 10)
-        if (this.totalGameTime > 15000 && !this.lastObstacleWasRapid && 
-            Math.random() < this.rapidSuccessionChance && 
-            this.timeSinceLastObstacle > minReactionTime * 0.75) {
-          
+        // Make sure we're not in early game or easy mode
+        if (this.totalGameTime > 10000 && 
+            this.totalGameTime > this.easyModeTimer && 
+            !this.lastObstacleWasRapid && 
+            Math.random() < this.rapidSuccessionChance) {
           // Force a shorter spawn time to create rapid succession effect
           safeSpawnRate = minReactionTime * 0.75;
-          rapidSuccession = true;
           this.lastObstacleWasRapid = true;
-          console.log("Creating rapid succession obstacle!");
+          this.isInConsecutiveSpawn = true;
         } else {
-          // Reset rapid succession tracker
           this.lastObstacleWasRapid = false;
+          this.isInConsecutiveSpawn = false;
         }
         
         // Surprise spawn chances increase with game time - more aggressive
-        const surpriseChance = Math.min(0.4, 0.25 + (this.totalGameTime / 50000) * 0.15); // Higher base chance (was 0.2)
+        // No surprise spawns during easy mode
+        const surpriseChance = Math.min(0.13, this.totalGameTime / 120000) * (this.totalGameTime > this.easyModeTimer ? 1 : 0);
         const surpriseSpawn = Math.random() < surpriseChance && this.timeSinceLastObstacle > minReactionTime * 0.8;
         
         if ((this.timeSinceLastObstacle > safeSpawnRate || surpriseSpawn) && this.canSpawnObstacle()) {
@@ -607,7 +608,7 @@ export default class ObstacleManager {
           
           // Make the game significantly easier for the first 20 seconds
           const isEasyMode = this.totalGameTime < this.easyModeTimer;
-          this.createRandomObstacle(rapidSuccession, doubleJumpRequired, isEasyMode);
+          this.createRandomObstacle(this.lastObstacleWasRapid, doubleJumpRequired, isEasyMode);
           
           this.timeSinceLastObstacle = 0;
           
@@ -698,7 +699,20 @@ export default class ObstacleManager {
     
     // Extra safety check but more aggressive
     const minSafeDistance = 180 + (this.gameSpeed * 0.4); // Tighter spacing (was 200 + 0.5)
-    const actualSpace = lastObstacle.x < 800 - dynamicSpace;
+    
+    // Add extra spacing requirement for the first few obstacles (early game)
+    let requiredSpace = minSafeDistance;
+    if (this.obstacleCountInEasyMode < 4 || this.totalGameTime < this.easyModeTimer) {
+      // Enforce significantly larger spacing during early game
+      requiredSpace = minSafeDistance * 2.5; // 2.5x the normal distance for early obstacles
+      
+      if (this.obstacleCountInEasyMode === 0) {
+        // Even more spacing for the very first obstacle
+        requiredSpace = minSafeDistance * 3;
+      }
+    }
+    
+    const actualSpace = lastObstacle.x < 800 - requiredSpace;
     
     return actualSpace;
   }
