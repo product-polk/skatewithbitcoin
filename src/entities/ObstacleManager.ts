@@ -443,6 +443,7 @@ export default class ObstacleManager {
   private satsAwardedThisJump: boolean = false;
   private lastScoringJumpId: number = -1;
   private playerWasJumping: boolean = false;
+  private playerWasOnGround: boolean = false;
   
   // New variables for dynamic difficulty
   private totalGameTime: number = 0; // Track total game time
@@ -551,15 +552,41 @@ export default class ObstacleManager {
       // Track player jump state to detect new jumps
       const playerIsJumping = player.state === 'jumping' || player.state === 'falling';
       
-      // If player just started jumping, assign a new jump ID
-      if (playerIsJumping && !this.playerWasJumping) {
+      // Only track jump state changes - DO NOT award points immediately to prevent scoring bugs
+      // IMPORTANT: Only count as a new jump if the player was previously on the ground
+      // This prevents counting the initial fall at game start as a jump
+      if (playerIsJumping && !this.playerWasJumping && this.playerWasOnGround) {
         this.currentJumpId++;
         this.satsAwardedThisJump = false;
         console.log(`New jump detected: Jump #${this.currentJumpId}`);
       }
       
-      // Store current jump state for next update
+      // Store current jump and ground states for next update
+      const playerWasOnGroundBefore = this.playerWasOnGround;
       this.playerWasJumping = playerIsJumping;
+      this.playerWasOnGround = player.onGround;
+      
+      // Award jump points - but only do this ONCE per frame max
+      // AND only if this specific jump hasn't been awarded points yet
+      // AND only if the player is not doing a trick
+      // AND only if this is a legitimate jump (not the initial game start)
+      if (playerIsJumping && 
+          !this.satsAwardedThisJump && 
+          this.currentJumpId > this.lastScoringJumpId && 
+          player.currentTrick === 'none' &&
+          this.totalGameTime > 1000 && // Prevent awarding points in the first second
+          playerWasOnGroundBefore) {  // Only award points if player was on ground before jumping
+        
+        // Award exactly 1 sat
+        const beforeSats = player.sats;
+        player.sats += 1;
+        
+        // Mark that we've awarded sats for this jump to prevent double-counting
+        this.satsAwardedThisJump = true;
+        this.lastScoringJumpId = this.currentJumpId;
+        
+        console.log(`JUMP SATS EVENT: Jump #${this.currentJumpId} - Sats before: ${beforeSats}, after: ${player.sats}, jump sat added`);
+      }
       
       // If player is back on ground, reset point tracking for next jump
       if (player.onGround && this.satsAwardedThisJump) {
@@ -636,9 +663,7 @@ export default class ObstacleManager {
         this.spawnActive = true;
       }
       
-      // Process obstacle updates and check for sats events in one pass
-      let satsResult: CollisionResult | null = null;
-      
+      // Process obstacle updates and check for collisions
       // Update existing obstacles
       for (let i = this.obstacles.length - 1; i >= 0; i--) {
         const obstacle = this.obstacles[i];
@@ -652,43 +677,16 @@ export default class ObstacleManager {
             return collisionResult;
           }
           
-          // Check if player has successfully jumped over this obstacle
+          // Check if player has successfully jumped over this obstacle (for tracking only)
           const hasPassedObstacle = player.x > obstacle.x + obstacle.width;
           
-          // Track all obstacles that have been passed
+          // Track all obstacles that have been passed (no longer awards points)
           if (hasPassedObstacle && !this.passedObstacles.has(obstacle)) {
             this.passedObstacles.add(obstacle);
             
-            // Only award sats for base obstacles (not for stacked parts)
-            // AND only if we haven't already awarded sats for this jump
-            // AND only if the player is in a jumping or falling state
-            if (!obstacle.stackParent && playerIsJumping && !this.satsAwardedThisJump) {
-              const pointValue = this.getObstaclePointValue(obstacle);
-              
-              // IMPORTANT: Set the flag BEFORE updating sats to prevent race conditions
-              this.satsAwardedThisJump = true;
-              this.lastScoringJumpId = this.currentJumpId;
-              
-              // Store player sats before adding
-              const beforeSats = player.sats;
-              
-              // Directly update player's sats to ensure correct value
-              player.sats += pointValue;
-              
-              console.log(`SATS EVENT: Jump #${this.currentJumpId} - Sats before: ${beforeSats}, after: ${player.sats}, sats added: ${pointValue}`);
-              
-              satsResult = { 
-                type: 'sats', 
-                points: pointValue,
-                obstacle
-              };
-              // Don't return immediately - continue processing other obstacles
-            } else if (obstacle.stackParent) {
-              console.log(`Passed stacked ${obstacle.type} obstacle - no sats awarded (part of stack)`);
-            } else if (this.satsAwardedThisJump && playerIsJumping) {
-              console.log(`Already awarded sats for Jump #${this.currentJumpId} - no extra sats for additional obstacle`);
-            } else if (!playerIsJumping) {
-              console.log(`Player not jumping while passing obstacle - no sats awarded`);
+            // Log that player passed obstacle (debug)
+            if (!obstacle.stackParent) {
+              console.log(`Passed ${obstacle.type} obstacle - no points awarded for obstacles`);
             }
           }
         }
@@ -833,13 +831,21 @@ export default class ObstacleManager {
         console.log(`SATS CHANGED: from ${initialSats} to ${player.sats} (diff: ${player.sats - initialSats})`);
       }
       
-      // Return sats result if we have one, otherwise check powerup collisions
-      if (satsResult) {
-        return satsResult;
+      // Create result to return
+      let result: CollisionResult = { type: 'none' };
+      
+      // If a sat was awarded this frame for a jump, return that info
+      if (player.sats > initialSats && this.satsAwardedThisJump) {
+        result = { type: 'sats', points: 1 };
+      } 
+      
+      // Check if there's a powerup collision (this doesn't add sats)
+      const powerUpResult = this.checkPowerUpCollisionsWithoutScoring(player);
+      if (powerUpResult.type !== 'none') {
+        result = powerUpResult;
       }
       
-      // Check powerup collisions
-      return this.checkPowerUpCollisionsWithoutScoring(player);
+      return result;
     } catch (err) {
       console.error('Error in ObstacleManager.update:', err);
       return { type: 'none' };
@@ -1230,6 +1236,7 @@ export default class ObstacleManager {
       this.currentJumpId = 0;
       this.lastScoringJumpId = -1;
       this.playerWasJumping = false;
+      this.playerWasOnGround = false;
       this.satsAwardedThisJump = false;
       
       console.log('Obstacle manager fully reset, including powerup system');

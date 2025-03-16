@@ -663,12 +663,21 @@ export const Canvas: React.FC<GameProps> = ({
           // Check if player just jumped (to play sound)
           const wasJumping = player.state === 'jumping';
           
+          // Track trick state before update
+          const wasTrickActive = player.currentTrick !== 'none';
+          
           // Update player
           player.update(cappedDeltaTime, inputManager);
           
           // Play jump sound if player just started jumping
           if (player.state === 'jumping' && !wasJumping && soundManagerRef.current) {
             soundManagerRef.current.play('jump');
+          }
+          
+          // Play trick sound if player just started a trick
+          if (player.currentTrick !== 'none' && !wasTrickActive && soundManagerRef.current) {
+            soundManagerRef.current.play('trick');
+            console.log('Playing trick sound for:', player.currentTrick);
           }
           
           // Update camera to follow player
@@ -1105,6 +1114,7 @@ export const Canvas: React.FC<GameProps> = ({
             soundManagerRef.current.stop('jump');
             soundManagerRef.current.stop('crash');
             soundManagerRef.current.stop('score');
+            soundManagerRef.current.stop('trick');
           }
           
           // Remove event listeners

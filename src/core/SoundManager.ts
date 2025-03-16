@@ -2,12 +2,12 @@
  * SoundManager.ts - Handles game audio playback and management
  */
 
-type SoundType = 'jump' | 'crash' | 'music' | 'score';
+type SoundType = 'jump' | 'crash' | 'music' | 'score' | 'trick';
 
 class SoundManager {
   private sounds: Map<SoundType, HTMLAudioElement> = new Map();
-  private musicVolume: number = 0.3;
-  private sfxVolume: number = 0.5;
+  private musicVolume: number = 0.165;
+  private sfxVolume: number = 0.275;
   private muted: boolean = false;
 
   constructor() {
@@ -23,6 +23,7 @@ class SoundManager {
       this.loadSound('jump', '/sounds/jump.mp3');
       this.loadSound('crash', '/sounds/crash.mp3');
       this.loadSound('score', '/sounds/score.mp3');
+      this.loadSound('trick', '/sounds/score.mp3'); // Reusing score sound for trick temporarily
       
       // Background music
       this.loadSound('music', '/sounds/background.mp3', true);
