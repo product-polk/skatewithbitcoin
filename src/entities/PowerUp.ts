@@ -28,13 +28,13 @@ const createFallbackPowerUpImage = (type: TrickType): HTMLImageElement => {
     let color = '#4dabf7'; // Default blue
     
     switch (type) {
-      case 'kickflip':
+      case 'blockflip':
         color = '#4dabf7'; // Blue
         break;
-      case '360flip':
+      case 'hashspin':
         color = '#da77f2'; // Purple
         break;
-      case 'heelflip':
+      case 'hodlgrab':
         color = '#69db7c'; // Green
         break;
     }
@@ -58,8 +58,8 @@ const createFallbackPowerUpImage = (type: TrickType): HTMLImageElement => {
     ctx.textBaseline = 'middle';
     
     let label = 'K';
-    if (type === '360flip') label = '3';
-    if (type === 'heelflip') label = 'H';
+    if (type === 'hashspin') label = '3';
+    if (type === 'hodlgrab') label = 'H';
     
     ctx.fillText(label, canvas.width/2, canvas.height/2);
     
@@ -343,11 +343,11 @@ export default class PowerUp {
    */
   private getTrickColor(): string {
     switch (this.type) {
-      case 'kickflip':
+      case 'blockflip':
         return '#4dabf7'; // Clean blue
-      case '360flip':
+      case 'hashspin':
         return '#da77f2'; // Clean purple
-      case 'heelflip':
+      case 'hodlgrab':
         return '#69db7c'; // Clean green
       default:
         return '#fcc419'; // Clean yellow

@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     // Validate the score (must be a number)
     if (typeof score !== 'number' || score < 0) {
       return NextResponse.json(
-        { error: 'Invalid score. Score must be a positive number.' },
+        { error: 'Invalid sats value. Sats must be a positive number.' },
         { status: 400 }
       );
     }

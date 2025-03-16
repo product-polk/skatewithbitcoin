@@ -6,7 +6,7 @@ import InputManager from '../core/InputManager';
 
 // Player state types
 export type PlayerState = 'idle' | 'skating' | 'jumping' | 'grinding' | 'falling' | 'crashed';
-export type TrickType = 'kickflip' | '360flip' | 'heelflip' | 'none';
+export type TrickType = 'blockflip' | 'hashspin' | 'hodlgrab' | 'none';
 
 interface PlayerConfig {
   x: number;
@@ -37,11 +37,11 @@ export default class Player {
   
   // Game state
   public state: PlayerState = 'idle';
-  public score: number = 0;
+  public sats: number = 0;
   public currentTrick: TrickType = 'none';
   public trickTimer: number = 0;
   public crashed: boolean = false;
-  public trickCompleted: boolean = false; // Track if current trick has awarded points
+  public trickCompleted: boolean = false; // Track if current trick has awarded sats
   
   // Power-up state
   public currentPowerUp: TrickType = 'none';  // Currently collected power-up
@@ -179,9 +179,9 @@ export default class Player {
       if (this.currentTrick !== 'none') {
         this.trickTimer += deltaTime;
         
-        // Award points after just 250ms, even if animation continues
+        // Award sats after just 250ms, even if animation continues
         if (this.trickTimer >= 250 && !this.trickCompleted) {
-          this.awardTrickPoints();
+          this.awardTrickSats();
         }
         
         // Complete trick animation after full 500ms
@@ -191,7 +191,7 @@ export default class Player {
       }
       
       // Simple ground collision (temporary)
-      const groundY = 400; // Static ground height
+      const groundY = 450; // Updated ground height
       if (this.y + this.height > groundY) {
         this.y = groundY - this.height;
         this.velocityY = 0;
@@ -341,36 +341,38 @@ export default class Player {
   }
   
   /**
-   * Award points for a trick (called early to ensure points are given)
+   * Award sats for a trick (called early to ensure sats are given)
    */
-  private awardTrickPoints(): void {
+  private awardTrickSats(): void {
     try {
-      // All tricks give a fixed number of points
-      const points = 5;
+      // All tricks give a fixed number of sats
+      const satsToAdd = 5;
       
-      if (this.currentTrick !== 'none') {
-        // Add points directly to score
-        this.score += points;
-        this.trickCompleted = true;
-        console.log(`Early trick points awarded: ${points} for ${this.currentTrick}`);
-      }
+      // Don't add more if already awarded for this trick
+      if (this.trickCompleted) return;
+      
+      // Add sats directly to total
+      this.sats += satsToAdd;
+      this.trickCompleted = true;
+      console.log(`Early trick sats awarded: ${satsToAdd} for ${this.currentTrick}`);
     } catch (err) {
-      console.error('Error in Player.awardTrickPoints:', err);
+      console.error('Error in Player.awardTrickSats:', err);
     }
   }
   
   /**
-   * Complete a trick animation after awarding points
+   * Complete a trick animation after awarding sats
    */
   private completeTrick(): void {
     try {
-      // Award points if not already awarded
-      if (this.currentTrick !== 'none' && !this.trickCompleted) {
-        const points = 5;
-        this.score += points;
-        console.log(`Completed ${this.currentTrick} for ${points} points`);
+      // Award sats if not already awarded
+      if (!this.trickCompleted) {
+        const satsToAdd = 5;
+        this.sats += satsToAdd;
+        console.log(`Completed ${this.currentTrick} for ${satsToAdd} sats`);
+        this.trickCompleted = true;
       } else if (this.currentTrick !== 'none') {
-        console.log(`Completed ${this.currentTrick} animation (points already awarded)`);
+        console.log(`Completed ${this.currentTrick} animation (sats already awarded)`);
       }
       
       this.currentTrick = 'none';
@@ -389,16 +391,14 @@ export default class Player {
       this.state = 'skating';
       this.onGround = true;
       
-      // If there's an ongoing trick when landing, ensure points are awarded
-      if (this.currentTrick !== 'none') {
-        // Award points if not already awarded and trick has been going for at least 100ms
-        if (!this.trickCompleted && this.trickTimer >= 100) {
-          this.awardTrickPoints();
-          console.log('Awarded points for trick interrupted by landing');
-        } else if (this.trickCompleted) {
-          console.log('Trick interrupted by landing, but points were already awarded');
+      // If there's an ongoing trick when landing, ensure sats are awarded
+      if (this.currentTrick !== 'none' && !this.trickCompleted) {
+        // Award sats if not already awarded and trick has been going for at least 100ms
+        if (this.trickTimer >= 100) {
+          this.awardTrickSats();
+          console.log('Awarded sats for trick interrupted by landing');
         } else {
-          console.log('Trick was too quick - no points awarded');
+          console.log('Trick was too quick - no sats awarded');
         }
         
         // Reset trick state
@@ -422,11 +422,12 @@ export default class Player {
       this.velocityY = 0;
       this.velocityX = this.speed * 0.8; // Slightly slower on rails
       
-      // Award fixed points for starting a grind (same as other tricks)
-      const points = 5;
-      this.score += points;
+      // Award fixed sats for starting a grind (same as other tricks)
+      const satsToAdd = 5;
+      this.sats += satsToAdd;
+      this.trickCompleted = true;
       
-      console.log(`Started grinding for ${points} points`);
+      console.log(`Started grinding for ${satsToAdd} sats`);
     } catch (err) {
       console.error('Error in Player.startGrind:', err);
     }
@@ -501,7 +502,7 @@ export default class Player {
       this.velocityX = 0;
       this.velocityY = 0;
       this.state = 'idle';
-      this.score = 0; // Reset score on game restart
+      this.sats = 0;
       this.currentTrick = 'none';
       this.trickTimer = 0;
       this.crashed = false;
@@ -559,15 +560,15 @@ export default class Player {
           let rotationAmount = (this.trickTimer / 500) * Math.PI;
           
           switch (this.currentTrick) {
-            case 'kickflip':
+            case 'blockflip':
               // Side flip - rotate around X axis (appears as scaling in 2D)
               ctx.scale(1, Math.cos(rotationAmount * 2));
               break;
-            case 'heelflip':
+            case 'hodlgrab':
               // Opposite side flip
               ctx.rotate(-rotationAmount);
               break;
-            case '360flip':
+            case 'hashspin':
               // Full rotation with a twist - 360 degrees rotation with some scaling
               ctx.rotate(rotationAmount * 2);
               // Add a slight wave effect for the 360 flip to make it look different
@@ -643,17 +644,17 @@ export default class Player {
         ctx.translate(boardX + boardWidth / 2, boardY + boardHeight / 2);
         
         switch (this.currentTrick) {
-          case 'kickflip':
+          case 'blockflip':
             // Kickflip: rotate board around its long axis
             ctx.rotate(Math.PI * (this.trickTimer / 500) * 1.5);
             ctx.scale(1, Math.abs(Math.cos(Math.PI * (this.trickTimer / 500) * 1.5)));
             break;
-          case 'heelflip':
+          case 'hodlgrab':
             // Heelflip: opposite rotation
             ctx.rotate(-Math.PI * (this.trickTimer / 500) * 1.5);
             ctx.scale(1, Math.abs(Math.cos(Math.PI * (this.trickTimer / 500) * 1.5)));
             break;
-          case '360flip':
+          case 'hashspin':
             // 360 flip: combination of flip and rotation
             ctx.rotate(Math.PI * 2 * (this.trickTimer / 500));
             ctx.scale(1, Math.abs(Math.cos(Math.PI * (this.trickTimer / 500) * 2)));
@@ -699,12 +700,6 @@ export default class Player {
         }
         
         ctx.restore();
-        
-        // Show trick name
-        ctx.fillStyle = 'white';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(this.currentTrick.toUpperCase(), screenX + this.width / 2, this.y - 15);
       } else {
         // Regular skateboard when not doing tricks
         // Increase skateboard dimensions for better visibility
@@ -808,15 +803,15 @@ export default class Player {
   }
   
   /**
-   * Draw player HUD (score, combo)
+   * Draw player HUD (sats, combo)
    */
   public drawHUD(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     try {
-      // Score display - removed the title to avoid duplication
+      // Sats display - removed the title to avoid duplication
       ctx.fillStyle = 'white';
       ctx.font = '24px Arial';
       ctx.textAlign = 'left';
-      ctx.fillText(`Score: ${this.score}`, 20, 30);
+      ctx.fillText(`Sats: ${this.sats}`, 20, 30);
       
       // Enhanced power-up indicator
       if (this.currentPowerUp !== 'none') {
@@ -866,8 +861,8 @@ export default class Player {
         ctx.textBaseline = 'middle';
         
         let label = 'K';
-        if (this.currentPowerUp === '360flip') label = '3';
-        if (this.currentPowerUp === 'heelflip') label = 'H';
+        if (this.currentPowerUp === 'hashspin') label = '3';
+        if (this.currentPowerUp === 'hodlgrab') label = 'H';
         
         ctx.fillText(label, indicatorX, indicatorY);
         
@@ -972,8 +967,23 @@ export default class Player {
       
       // Current trick - only show the current trick now
       if (this.currentTrick !== 'none') {
+        // Text content and position
+        const trickText = this.currentTrick.toUpperCase();
+        const trickX = width / 2 - 50;
+        const trickY = height / 2;
+        
+        // Text measurements for background
+        ctx.font = '24px Arial'; // Assuming we're using the same font as the sats display
+        ctx.textAlign = 'left';
+        const textWidth = ctx.measureText(trickText).width;
+        
+        // Draw background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Semi-transparent black background
+        ctx.fillRect(trickX - 5, trickY - 20, textWidth + 10, 28); // Add padding around the text
+        
+        // Draw text
         ctx.fillStyle = 'cyan';
-        ctx.fillText(`${this.currentTrick.toUpperCase()}`, width / 2 - 50, height / 2);
+        ctx.fillText(trickText, trickX, trickY);
       }
       
     } catch (err) {
@@ -986,11 +996,11 @@ export default class Player {
    */
   private getTrickColor(trickType: TrickType): string {
     switch (trickType) {
-      case 'kickflip':
+      case 'blockflip':
         return '#4dabf7'; // Clean blue
-      case '360flip':
+      case 'hashspin':
         return '#da77f2'; // Clean purple
-      case 'heelflip':
+      case 'hodlgrab':
         return '#69db7c'; // Clean green
       default:
         return '#fcc419'; // Clean yellow

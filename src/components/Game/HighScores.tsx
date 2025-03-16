@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 // Define high score interface
 interface HighScore {
@@ -13,20 +13,20 @@ interface HighScore {
 interface HighScoresProps {
   isOpen: boolean;
   onClose: () => void;
-  currentScore: number;
-  playerHighScore: number;
+  currentSats: number;
+  playerHighSats: number;
   onSubmit?: (name: string) => void;
 }
 
 const HighScores: React.FC<HighScoresProps> = ({
   isOpen,
   onClose,
-  currentScore,
-  playerHighScore,
+  currentSats,
+  playerHighSats,
   onSubmit
 }) => {
   // Always log when component renders
-  console.log('HighScores component rendering with props:', { isOpen, currentScore, playerHighScore });
+  console.log('HighScores component rendering with props:', { isOpen, currentSats, playerHighSats });
 
   const [globalScores, setGlobalScores] = useState<HighScore[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -37,6 +37,8 @@ const HighScores: React.FC<HighScoresProps> = ({
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [showNameInput, setShowNameInput] = useState<boolean>(false);
   const [autoSubmitted, setAutoSubmitted] = useState<boolean>(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Generate a device ID based on browser information
   useEffect(() => {
@@ -69,13 +71,13 @@ const HighScores: React.FC<HighScoresProps> = ({
   useEffect(() => {
     console.log('Auto-submit effect triggered with:', { 
       isOpen, 
-      currentScore, 
+      currentSats, 
       playerName, 
       autoSubmitted 
     });
     
     // Only auto-submit if we have a saved name from before
-    if (isOpen && currentScore > 0) {
+    if (isOpen && currentSats > 0) {
       const savedPlayerName = localStorage.getItem('skatewithbitcoinPlayerName');
       
       if (savedPlayerName && playerName && !autoSubmitted) {
@@ -92,21 +94,21 @@ const HighScores: React.FC<HighScoresProps> = ({
         setShowNameInput(true);
       }
     }
-  }, [isOpen, currentScore, playerName, autoSubmitted]);
+  }, [isOpen, currentSats, playerName, autoSubmitted]);
 
   // Always force showing the input form if we have a score but no player name
   useEffect(() => {
-    if (isOpen && currentScore > 0 && !playerName) {
+    if (isOpen && currentSats > 0 && !playerName) {
       console.log('Force showing name input because no saved name exists');
       setShowNameInput(true);
     }
-  }, [isOpen, currentScore, playerName]);
+  }, [isOpen, currentSats, playerName]);
 
   // Make sure to show the form when it's opened and we don't have a player name yet
   useEffect(() => {
     if (isOpen) {
-      console.log('Modal opened with currentScore:', currentScore);
-      if (currentScore > 0 && !playerName) {
+      console.log('Modal opened with currentSats:', currentSats);
+      if (currentSats > 0 && !playerName) {
         console.log('Showing name input form on modal open');
         setShowNameInput(true);
       }
@@ -125,8 +127,8 @@ const HighScores: React.FC<HighScoresProps> = ({
     // Component state
     console.log('Component state on mount:');
     console.log('- isOpen:', isOpen);
-    console.log('- currentScore:', currentScore);
-    console.log('- playerHighScore:', playerHighScore);
+    console.log('- currentSats:', currentSats);
+    console.log('- playerHighSats:', playerHighSats);
     console.log('- playerName state:', playerName);
   }, []);
   
@@ -214,7 +216,7 @@ const HighScores: React.FC<HighScoresProps> = ({
     
     try {
       setSubmitting(true);
-      console.log('Starting score submission process with name:', playerName, 'score:', currentScore);
+      console.log('Starting score submission process with name:', playerName, 'score:', currentSats);
       
       // Save player name to localStorage immediately so it's available even if API submission fails
       localStorage.setItem('skatewithbitcoinPlayerName', playerName);
@@ -224,10 +226,10 @@ const HighScores: React.FC<HighScoresProps> = ({
       const timestamp = Date.now().toString();
       
       // Create a simple client-side hash for score verification
-      const scoreHash = await generateScoreHash(currentScore, deviceId || 'unknown', timestamp);
+      const scoreHash = await generateScoreHash(currentSats, deviceId || 'unknown', timestamp);
       
       console.log('Submitting high score:', { 
-        score: currentScore, 
+        score: currentSats, 
         name: playerName, 
         deviceId,
         timestamp,
@@ -241,7 +243,7 @@ const HighScores: React.FC<HighScoresProps> = ({
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            score: currentScore,
+            score: currentSats,
             name: playerName,
             deviceId,
             timestamp,
@@ -437,24 +439,24 @@ const HighScores: React.FC<HighScoresProps> = ({
                 justifyContent: 'space-between',
                 marginBottom: '8px'
               }}>
-                <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>Current Score:</p>
+                <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>Current Sats:</p>
                 <p style={{ 
                   color: '#4ADE80', 
                   fontWeight: 'bold',
                   fontSize: '18px'
-                }}>{currentScore}</p>
+                }}>{currentSats}</p>
               </div>
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 marginBottom: playerRank ? '8px' : '0'
               }}>
-                <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>Your High Score:</p>
+                <p style={{ color: 'rgba(255, 255, 255, 0.8)' }}>Your High Sats:</p>
                 <p style={{ 
                   color: '#FBBF24', 
                   fontWeight: 'bold',
                   fontSize: '18px'
-                }}>{playerHighScore}</p>
+                }}>{playerHighSats}</p>
               </div>
               {playerRank && (
                 <div style={{
@@ -477,7 +479,7 @@ const HighScores: React.FC<HighScoresProps> = ({
             </div>
             
             {/* Make name input form more prominent and always visible when needed */}
-            {(showNameInput || (currentScore > 0 && !playerName)) && (
+            {(showNameInput || (currentSats > 0 && !playerName)) && (
               <div style={{ 
                 marginBottom: '28px',
                 backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -495,8 +497,8 @@ const HighScores: React.FC<HighScoresProps> = ({
                       fontWeight: 'bold',
                       fontSize: '16px' 
                     }}>
-                      {currentScore > playerHighScore 
-                        ? 'New high score! Enter your name:' 
+                      {currentSats > playerHighSats 
+                        ? 'New high sats! Enter your name:' 
                         : 'Enter your name to join the leaderboard:'}
                     </label>
                     <input
@@ -583,7 +585,7 @@ const HighScores: React.FC<HighScoresProps> = ({
                       }
                     }}
                   >
-                    {submitting ? 'Submitting...' : 'Submit Score'}
+                    {submitting ? 'Submitting...' : 'Submit Sats'}
                   </button>
                 </form>
               </div>
@@ -607,7 +609,7 @@ const HighScores: React.FC<HighScoresProps> = ({
                 backgroundColor: '#3b82f6',
                 borderRadius: '2px'
               }}></span>
-              Top Scores
+              Top Sats
             </h3>
             
             {isLoading ? (
@@ -710,7 +712,7 @@ const HighScores: React.FC<HighScoresProps> = ({
                         textTransform: 'uppercase',
                         letterSpacing: '1px'
                       }}>
-                        Score
+                        Sats
                       </th>
                       <th style={{ 
                         padding: '12px 16px', 

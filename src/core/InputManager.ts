@@ -5,7 +5,7 @@
 // Define supported input actions
 export type InputAction = 
   'jump' | 'left' | 'right' | 
-  'trickKickflip' | 'trick360Flip' | 'trickHeelflip';
+  'trickBlockflip' | 'trickHashSpin' | 'trickHodlGrab';
 
 // Interface for a key binding
 interface KeyBinding {
@@ -35,9 +35,9 @@ export default class InputManager {
     { code: 'ArrowRight', action: 'right' },
     { code: 'KeyD', action: 'right' },
     
-    { code: 'KeyQ', action: 'trickKickflip' },
-    { code: 'KeyE', action: 'trick360Flip' },
-    { code: 'KeyR', action: 'trickHeelflip' }
+    { code: 'KeyQ', action: 'trickBlockflip' },
+    { code: 'KeyE', action: 'trickHashSpin' },
+    { code: 'KeyR', action: 'trickHodlGrab' }
   ];
 
   constructor() {
@@ -115,8 +115,8 @@ export default class InputManager {
     this.createTouchButton(container, 'jump', -70, -70, 'JUMP');
     
     // Add trick buttons on right side
-    this.createTouchButton(container, 'trickKickflip', -70, -150, 'FLIP');
-    this.createTouchButton(container, 'trick360Flip', -150, -150, '360');
+    this.createTouchButton(container, 'trickBlockflip', -70, -150, 'FLIP');
+    this.createTouchButton(container, 'trickHashSpin', -150, -150, '360');
     
     console.log('Touch controls added to container');
   }

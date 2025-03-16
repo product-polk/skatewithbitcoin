@@ -8,17 +8,17 @@ import crypto from 'crypto';
 const dataDirectory = path.join(process.cwd(), 'data');
 const highScoresFile = path.join(dataDirectory, 'highscores.json');
 
-// Secret key for score verification
+// Secret key for sats verification
 // In a production app, this would be an environment variable
-const SCORE_SECRET_KEY = 'skatewithbitcoin-secure-score-key-do-not-share';
+const SATS_SECRET_KEY = 'skatewithbitcoin-secure-score-key-do-not-share';
 
-// Generate a verification hash for a score
+// Generate a verification hash for sats
 function generateScoreHash(score, deviceId, timestamp) {
-  const data = `${score}:${deviceId}:${timestamp}:${SCORE_SECRET_KEY}`;
+  const data = `${score}:${deviceId}:${timestamp}:${SATS_SECRET_KEY}`;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
-// Verify that a score hash is valid
+// Verify that a sats hash is valid
 function verifyScoreHash(score, deviceId, timestamp, hash) {
   const expectedHash = generateScoreHash(score, deviceId, timestamp);
   return crypto.timingSafeEqual(
@@ -88,13 +88,13 @@ export default function handler(req, res) {
       
       // Basic validation
       if (!score) {
-        return res.status(400).json({ error: 'Score is required' });
+        return res.status(400).json({ error: 'Sats amount is required' });
       }
       
       // Prevent extremely large scores (likely fake)
       const numericScore = Number(score);
       if (isNaN(numericScore) || numericScore < 0 || numericScore > 99999) {
-        return res.status(400).json({ error: 'Invalid score value' });
+        return res.status(400).json({ error: 'Invalid sats value' });
       }
       
       // Verify score hash if provided (this will be implemented on the client later)
@@ -102,12 +102,12 @@ export default function handler(req, res) {
         try {
           const isValid = verifyScoreHash(score, deviceId, timestamp, scoreHash);
           if (!isValid) {
-            console.error(`[API] Invalid score hash for score ${score} from ${deviceId}`);
-            return res.status(403).json({ error: 'Score verification failed' });
+            console.error(`[API] Invalid sats hash for score ${score} from ${deviceId}`);
+            return res.status(403).json({ error: 'Sats verification failed' });
           }
         } catch (error) {
-          console.error(`[API] Error verifying score hash: ${error.message}`);
-          return res.status(403).json({ error: 'Score verification failed' });
+          console.error(`[API] Error verifying sats hash: ${error.message}`);
+          return res.status(403).json({ error: 'Sats verification failed' });
         }
       }
       
@@ -117,7 +117,7 @@ export default function handler(req, res) {
         .slice(0, 20) // Max 20 chars
         .replace(/[<>]/g, ''); // Remove potentially dangerous chars
       
-      console.log(`[API] Adding new high score: ${score} by ${sanitizedName}`);
+      console.log(`[API] Adding new high score: ${score} sats by ${sanitizedName}`);
       
       // Read the existing high scores
       const fileContents = fs.readFileSync(highScoresFile, 'utf8');
@@ -160,7 +160,7 @@ export default function handler(req, res) {
       res.status(200).json({ 
         topScores, 
         rank,
-        message: 'Score saved successfully' 
+        message: 'Sats saved successfully' 
       });
     } else {
       res.status(405).json({ error: 'Method not allowed' });

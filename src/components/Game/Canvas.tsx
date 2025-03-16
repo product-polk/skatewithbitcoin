@@ -109,8 +109,8 @@ export const Canvas: React.FC<GameProps> = ({
     const imageDimensions = {
       sky: { width: 0, height: 0 },
       mountains: { width: 0, height: 0 },
-      buildings: { width: 1600, height: 400 }, // Height to match ground level (400px)
-      ground: { width: 1600, height: 200 }
+      buildings: { width: 1600, height: 450 }, // Extend to the new ground level (450px)
+      ground: { width: 1600, height: 150 }
     };
     
     // Pre-set dimensions to help browser rendering
@@ -239,15 +239,15 @@ export const Canvas: React.FC<GameProps> = ({
   // Load high score from localStorage on component mount
   useEffect(() => {
     try {
-      const savedHighScore = localStorage.getItem('skatewithbitcoinHighScore');
-      console.log(`[Initial Load] Saved high score from localStorage:`, savedHighScore);
-      if (savedHighScore) {
-        const parsedHighScore = parseInt(savedHighScore, 10);
-        console.log(`[Initial Load] Parsed high score:`, parsedHighScore);
-        setHighScore(parsedHighScore);
-        highScoreRef.current = parsedHighScore;
+      const savedHighSats = localStorage.getItem('skatewithbitcoinHighScore');
+      console.log(`[Initial Load] Saved high sats from localStorage:`, savedHighSats);
+      if (savedHighSats) {
+        const parsedHighSats = parseInt(savedHighSats, 10);
+        console.log(`[Initial Load] Parsed high sats:`, parsedHighSats);
+        setHighScore(parsedHighSats);
+        highScoreRef.current = parsedHighSats;
       } else {
-        console.log(`[Initial Load] No saved high score found, using default:`, highScore);
+        console.log(`[Initial Load] No saved high sats found, using default:`, highScore);
       }
       
       // Also load device ID if available
@@ -256,42 +256,42 @@ export const Canvas: React.FC<GameProps> = ({
         setDeviceId(savedDeviceId);
       }
     } catch (err) {
-      console.error('Error loading high score from localStorage:', err);
+      console.error('Error loading high sats from localStorage:', err);
     }
   }, []);
   
-  // Update high score when player's score changes and manage leaderboard opening
+  // Update high score when player's sats changes and manage leaderboard opening
   useEffect(() => {
     // Only proceed if player reference exists
     if (!playerRef.current) return;
     
-    const playerScore = playerRef.current.score;
+    const playerSats = playerRef.current.sats;
     
-    // Check if player's score is a new high score
-    if (playerScore > 0 && playerScore > highScore) {
-      console.log(`New high score achieved: ${playerScore} > ${highScore}`);
+    // Check if player's sats is a new high score
+    if (playerSats > 0 && playerSats > highScore) {
+      console.log(`New high sats achieved: ${playerSats} > ${highScore}`);
       
       // Update high score in state and ref
-      setHighScore(playerScore);
-      highScoreRef.current = playerScore;
+      setHighScore(playerSats);
+      highScoreRef.current = playerSats;
       
       // Save to localStorage immediately
       try {
-        localStorage.setItem('skatewithbitcoinHighScore', playerScore.toString());
-        console.log(`[Score Update] High score saved to localStorage: ${playerScore}`);
+        localStorage.setItem('skatewithbitcoinHighScore', playerSats.toString());
+        console.log(`[Sats Update] High sats saved to localStorage: ${playerSats}`);
       } catch (err) {
-        console.error('[Score Update] Error saving high score to localStorage:', err);
+        console.error('[Sats Update] Error saving high sats to localStorage:', err);
       }
     }
     
     // If player has crashed, check for high score and show modal ONLY ONCE per game session
     if (playerRef.current.crashed && gameState === 'playing') {
-      console.log('Player crashed with score:', playerScore);
+      console.log('Player crashed with sats:', playerSats);
       setGameState('crashed');
       
       // Only show high scores if this is a new/equal high score
-      if (playerScore > 0 && playerScore >= highScore) {
-        console.log('Will show high scores due to new high score');
+      if (playerSats > 0 && playerSats >= highScore) {
+        console.log('Will show high scores due to new high sats');
         // Delay showing high scores to ensure game over screen is shown first
         setTimeout(() => {
           if (!isHighScoresOpen && !modalCooldown) {
@@ -302,7 +302,7 @@ export const Canvas: React.FC<GameProps> = ({
         }, 1500);
       }
     }
-  }, [playerRef.current?.score, playerRef.current?.crashed, highScore, isHighScoresOpen, modalCooldown, gameState]);
+  }, [playerRef.current?.sats, playerRef.current?.crashed, highScore, isHighScoresOpen, modalCooldown, gameState]);
   
   // Add an effect to handle the modal cooldown
   useEffect(() => {
@@ -347,7 +347,7 @@ export const Canvas: React.FC<GameProps> = ({
   
   // Handle high score submission - enhanced to ensure callback is passed correctly
   const handleHighScoreSubmit = (name: string) => {
-    console.log(`High score submitted by ${name}: ${score}`);
+    console.log(`High score submitted by ${name}: ${score} sats`);
     
     // Create a verification hash using timestamp to prevent replay attacks
     const timestamp = Date.now().toString();
@@ -369,17 +369,17 @@ export const Canvas: React.FC<GameProps> = ({
       console.log('[Manual Restart] Restart button clicked');
       if (playerRef.current && obstacleManagerRef.current) {
         // Check if current score is a new high score before resetting
-        if (playerRef.current.score > highScoreRef.current) {
-          console.log(`[Manual Restart] Saving new high score before restart: ${playerRef.current.score} > ${highScoreRef.current}`);
-          setHighScore(playerRef.current.score);
-          highScoreRef.current = playerRef.current.score;
-          localStorage.setItem('skatewithbitcoinHighScore', playerRef.current.score.toString());
+        if (playerRef.current.sats > highScoreRef.current) {
+          console.log(`[Manual Restart] Saving new high sats before restart: ${playerRef.current.sats} > ${highScoreRef.current}`);
+          setHighScore(playerRef.current.sats);
+          highScoreRef.current = playerRef.current.sats;
+          localStorage.setItem('skatewithbitcoinHighScore', playerRef.current.sats.toString());
           
           // Reset game state for next session
           setGameState('idle');
           
           // Always show high scores on restart if it's a high score
-          if (playerRef.current.score > 0 && !isHighScoresOpen && !modalCooldown) {
+          if (playerRef.current.sats > 0 && !isHighScoresOpen && !modalCooldown) {
             console.log('[Manual Restart] Showing high scores modal');
             setIsHighScoresOpen(true);
             return; // Exit early - we'll restart when modal is closed
@@ -391,7 +391,7 @@ export const Canvas: React.FC<GameProps> = ({
         floatingScoresRef.current = []; // Clear all floating score indicators
         
         // Reset player position and state
-        playerRef.current.reset(100, 300);
+        playerRef.current.reset(100, 330);
         playerRef.current.state = 'skating';
         
         // Clear and reset obstacles
@@ -438,15 +438,15 @@ export const Canvas: React.FC<GameProps> = ({
           
           // Use background image for loading screen if loaded
           if (backgroundImagesLoaded && backgroundImagesRef.current.buildings) {
-            // Draw buildings to end at ground level (y=400)
+            // Draw buildings to end at ground level (y=450)
             ctx.drawImage(
               backgroundImagesRef.current.buildings,
-              0, 0, canvas.width, 400
+              0, 0, canvas.width, 450
             );
             
             // Draw ground if available
             if (backgroundImagesRef.current.ground) {
-              const groundY = 400;
+              const groundY = 450;
               const groundHeight = canvas.height - groundY;
               ctx.drawImage(
                 backgroundImagesRef.current.ground,
@@ -498,7 +498,7 @@ export const Canvas: React.FC<GameProps> = ({
       // Create player with appropriate jump height
       const player = new Player({
         x: 100,
-        y: 300,
+        y: 330,
         width: 60,
         height: 120,
         speed: 200,
@@ -569,11 +569,11 @@ export const Canvas: React.FC<GameProps> = ({
           console.log('[Restart] restartGame function called');
           if (player) {
             // Check if current score is a new high score before resetting
-            if (player.score > highScoreRef.current) {
-              console.log(`[Restart] Saving new high score before restart: ${player.score} > ${highScoreRef.current}`);
-              setHighScore(player.score);
-              highScoreRef.current = player.score;
-              localStorage.setItem('skatewithbitcoinHighScore', player.score.toString());
+            if (player.sats > highScoreRef.current) {
+              console.log(`[Restart] Saving new high sats before restart: ${player.sats} > ${highScoreRef.current}`);
+              setHighScore(player.sats);
+              highScoreRef.current = player.sats;
+              localStorage.setItem('skatewithbitcoinHighScore', player.sats.toString());
             }
             
             // Reset all game state except high score
@@ -581,7 +581,7 @@ export const Canvas: React.FC<GameProps> = ({
             floatingScoresRef.current = []; // Clear all floating score indicators
             
             // Reset player position and state
-            player.reset(100, 300);
+            player.reset(100, 330);
             player.state = 'skating';
             
             // Clear and reset obstacles
@@ -687,48 +687,48 @@ export const Canvas: React.FC<GameProps> = ({
                   soundManagerRef.current.pause('music');
                 }
               }
-            } else if (collisionResult.type === 'score') {
+            } else if (collisionResult.type === 'sats') {
               if (collisionResult.points) {
-                const pointsToAdd = collisionResult.points;
+                const satsToAdd = collisionResult.points;
                 // Play score sound
                 if (soundManagerRef.current) {
                   soundManagerRef.current.play('score');
                 }
                 
-                // Update the component's score state to stay in sync with player.score
-                setScore(player.score);
+                // Update the component's score state to stay in sync with player.sats
+                setScore(player.sats);
                 
                 // Update high score if needed
-                if (player.score > highScoreRef.current) {
-                  console.log(`[Score Update] New high score! ${player.score} > ${highScoreRef.current}`);
+                if (player.sats > highScoreRef.current) {
+                  console.log(`[Sats Update] New high sats! ${player.sats} > ${highScoreRef.current}`);
                   
                   // Update high score state
-                  const newHighScore = player.score;
-                  setHighScore(newHighScore);
-                  highScoreRef.current = newHighScore;
+                  const newHighSats = player.sats;
+                  setHighScore(newHighSats);
+                  highScoreRef.current = newHighSats;
                   
                   // Store in localStorage
                   try {
-                    localStorage.setItem('skatewithbitcoinHighScore', newHighScore.toString());
-                    console.log(`[Score Update] High score saved to localStorage: ${newHighScore}`);
+                    localStorage.setItem('skatewithbitcoinHighScore', newHighSats.toString());
+                    console.log(`[Sats Update] High sats saved to localStorage: ${newHighSats}`);
                   } catch (err) {
-                    console.error('[Score Update] Error saving high score to localStorage:', err);
+                    console.error('[Sats Update] Error saving high sats to localStorage:', err);
                   }
                 } else {
-                  console.log(`[Score Update] Score updated (${player.score}), but not higher than high score (${highScoreRef.current})`);
+                  console.log(`[Sats Update] Sats updated (${player.sats}), but not higher than high score (${highScoreRef.current})`);
                 }
                 
                 // Show a floating score indicator
                 if (collisionResult.obstacle) {
                   const obstacle = collisionResult.obstacle;
-                  console.log(`Scored ${pointsToAdd} points for passing obstacle at ${obstacle.x}`);
+                  console.log(`Earned ${satsToAdd} sats for passing obstacle at ${obstacle.x}`);
                   
                   // Create floating score indicator
                   floatingScoresRef.current.push({
-                    value: pointsToAdd,
+                    value: satsToAdd,
                     x: obstacle.x + obstacle.width / 2,
                     y: obstacle.y - 20,
-                    color: '#FFFFFF', // Always white now that points are always 1
+                    color: '#FFFFFF', // Always white now that sats are always 1
                     life: 1500, // ms
                     maxLife: 1500
                   });
@@ -777,21 +777,21 @@ export const Canvas: React.FC<GameProps> = ({
           if (backgroundImagesLoaded && bgImages.buildings) {
             const buildingParallax = cameraOffsetRef.current * 0.5;
             
-            // Draw the buildings image to end at ground level (y=400)
+            // Draw the buildings image to end at ground level (y=450)
             // Draw the image twice to create a seamless loop
             ctx.drawImage(
               bgImages.buildings,
               -buildingParallax % bgImages.buildings.width,
               0, // Start from the top of the canvas
               bgImages.buildings.width,
-              400 // End at the ground level (y=400)
+              450 // End at the ground level (y=450)
             );
             ctx.drawImage(
               bgImages.buildings,
               (-buildingParallax % bgImages.buildings.width) + bgImages.buildings.width,
               0, // Start from the top of the canvas
               bgImages.buildings.width,
-              400 // End at the ground level (y=400)
+              450 // End at the ground level (y=450)
             );
           } else {
             // Fallback if image not loaded
@@ -803,7 +803,7 @@ export const Canvas: React.FC<GameProps> = ({
             for (let i = 0; i < 5; i++) {
               const buildingX = ((i * 200) - ((cameraOffsetRef.current * 0.5) % 200));
               const buildingHeight = 100 + (i % 3) * 50;
-              ctx.fillRect(buildingX, 400 - buildingHeight, 100, buildingHeight);
+              ctx.fillRect(buildingX, 450 - buildingHeight, 100, buildingHeight);
             }
           }
           
@@ -813,8 +813,8 @@ export const Canvas: React.FC<GameProps> = ({
             
             // Calculate the exact position once to avoid redundant calculations
             const groundWidth = bgImages.ground.width;
-            const groundHeight = canvas.height - 400; // Adjust ground height to fill the entire bottom
-            const groundY = 400;
+            const groundHeight = canvas.height - 450; // Adjust ground height to fill the entire bottom
+            const groundY = 450;
             const parallaxOffset = -groundParallax % groundWidth;
             
             // Use double buffering technique - only draw what's visible plus a small buffer
@@ -844,7 +844,7 @@ export const Canvas: React.FC<GameProps> = ({
           } else {
             // Efficient fallback - just draw the ground once
             ctx.fillStyle = '#3e291e'; // Dark brown for ground
-            ctx.fillRect(0, 400, canvas.width, canvas.height - 400);
+            ctx.fillRect(0, 450, canvas.width, canvas.height - 450);
             
             // Draw fewer ground lines for better performance
             const visibleWidth = canvas.width;
@@ -857,7 +857,7 @@ export const Canvas: React.FC<GameProps> = ({
             
             for (let i = 0; i < linesNeeded; i++) {
               const lineX = ((i * lineSpacing) - (cameraOffsetRef.current % lineSpacing));
-              ctx.moveTo(lineX, 400);
+              ctx.moveTo(lineX, 450);
               ctx.lineTo(lineX + 60, 500);
             }
             ctx.stroke();
@@ -892,7 +892,7 @@ export const Canvas: React.FC<GameProps> = ({
           ctx.fillStyle = 'white';
           ctx.font = '16px Arial';
           ctx.textAlign = 'right';
-          ctx.fillText(`HIGH SCORE: ${highScoreRef.current}`, canvas.width - 10, 25);
+          ctx.fillText(`MAX SATS: ${highScoreRef.current}`, canvas.width - 10, 25);
           
           // Draw game over text
           if (player.crashed) {
@@ -916,19 +916,19 @@ export const Canvas: React.FC<GameProps> = ({
             
             // Final score with large prominent display
             ctx.font = '48px Arial';
-            ctx.fillText(`${player.score}`, canvas.width / 2, 220);
+            ctx.fillText(`${player.sats}`, canvas.width / 2, 220);
             
             // Display current high score
             ctx.fillStyle = 'white';
             ctx.font = '16px Arial';
-            ctx.fillText(`High Score: ${highScoreRef.current}`, canvas.width / 2, 250);
+            ctx.fillText(`Max Sats: ${highScoreRef.current}`, canvas.width / 2, 250);
             
             // New high score indicator
-            if (player.score >= highScoreRef.current) {
-              console.log(`[Game Over] Showing new high score message: ${player.score} >= ${highScoreRef.current}`);
+            if (player.sats >= highScoreRef.current) {
+              console.log(`[Game Over] Showing new high sats message: ${player.sats} >= ${highScoreRef.current}`);
               ctx.fillStyle = '#FFD700'; // Gold color
               ctx.font = '24px Arial';
-              ctx.fillText('New High Score!', canvas.width / 2, 280);
+              ctx.fillText('New Sats Record!', canvas.width / 2, 280);
             }
             
             // Restart instruction
@@ -1341,8 +1341,8 @@ export const Canvas: React.FC<GameProps> = ({
             setGameState('idle');
           }
         }}
-        currentScore={score}
-        playerHighScore={highScore}
+        currentSats={score}
+        playerHighSats={highScore}
         onSubmit={handleHighScoreSubmit}
       />
     </div>
