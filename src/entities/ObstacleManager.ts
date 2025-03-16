@@ -33,11 +33,12 @@ const bitcoinObstacleImages = [
   'tesla.png'
 ];
 
-// Fallback images in case all Bitcoin-themed images fail to load
+// Fallback images in case Bitcoin-themed images fail to load
+// These should be simple, reliable Bitcoin images that are guaranteed to exist
 const fallbackObstacleImages = [
-  'bitcoin-logo.png',
-  'lightning.png', 
-  'satoshi.png'
+  'Bitcoin-Logo.png',   // Using existing Bitcoin logo (note the case)
+  'bitcoin-symbol.png', // Will be added next
+  'btc-icon.png'        // Will be added next
 ];
 
 // Track which images have been used to avoid immediate repetition
@@ -92,7 +93,7 @@ function getObstacleImage(type: ObstacleType): HTMLImageElement {
   
   // Track load attempts for fallback chain
   let loadAttempt = 0;
-  const maxAttempts = 3;
+  const maxAttempts = 2; // Reduced from 3 to 2 (removing the old obstacle fallback)
   
   // Define our image loading function to handle retries
   const attemptImageLoad = () => {
@@ -101,15 +102,11 @@ function getObstacleImage(type: ObstacleType): HTMLImageElement {
     if (loadAttempt === 1) {
       // First attempt: use Bitcoin image from Obstacles folder
       img.src = `/images/Obstacles/${bitcoinImage}`;
-    } else if (loadAttempt === 2) {
-      // Second attempt: try fallback folder
-      const fallbackImage = fallbackObstacleImages[Math.floor(Math.random() * fallbackObstacleImages.length)];
-      console.log(`Trying fallback image: ${fallbackImage}`);
-      img.src = `/images/${fallbackImage}`;
     } else {
-      // Final attempt: use obstacle type image
-      console.log(`Using final fallback for type: ${type}`);
-      img.src = `/images/obstacle-${type}.png`;
+      // Second and final attempt: try Bitcoin fallback images
+      const fallbackImage = fallbackObstacleImages[Math.floor(Math.random() * fallbackObstacleImages.length)];
+      console.log(`Trying fallback Bitcoin image: ${fallbackImage}`);
+      img.src = `/images/${fallbackImage}`;
     }
   };
   
@@ -236,7 +233,6 @@ export class Obstacle {
         ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
         ctx.shadowBlur = 5;
         ctx.shadowOffsetY = 2;
-        ctx.shadowOffsetX = 0;
         
         ctx.fillRect(
           drawX, 
@@ -247,7 +243,6 @@ export class Obstacle {
         
         // Create a more pronounced border
         ctx.shadowBlur = 0; // Remove shadow for border
-        ctx.shadowOffsetY = 0;
         ctx.strokeStyle = 'rgba(255, 165, 0, 0.9)'; // Increased orange border opacity from 0.8 to 0.9
         ctx.lineWidth = 2; // Increased from 1.5 to 2 for better visibility
         ctx.strokeRect(
@@ -296,29 +291,16 @@ export class Obstacle {
         ctx.shadowBlur = 0;
         ctx.shadowOffsetY = 0;
       } else {
-        // Fallback to shapes if image is not loaded
-        if (this.hit && this.type !== 'box') {
-          ctx.fillStyle = '#444';
-        } else {
-          switch (this.type) {
-            case 'box':
-              ctx.fillStyle = '#8B4513'; // Brown
-              break;
-            case 'ramp':
-              ctx.fillStyle = '#228B22'; // Green
-              break;
-            case 'rail':
-              ctx.fillStyle = '#4682B4'; // Steel Blue
-              break;
-          }
-        }
+        // Updated fallback to always show Bitcoin-themed elements
+        // Use consistent Bitcoin orange for all obstacles
+        ctx.fillStyle = '#F7931A'; // Bitcoin orange
         
-        // Add shadow for fallback shapes too
+        // Add shadow for 3D effect
         ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
         ctx.shadowBlur = 5;
         ctx.shadowOffsetY = 2;
         
-        // Draw different obstacle shapes as fallback
+        // Draw base shape
         if (this.type === 'ramp') {
           // Draw ramp as a triangle
           ctx.beginPath();
@@ -326,49 +308,18 @@ export class Obstacle {
           ctx.lineTo(drawX + this.width, this.y);
           ctx.lineTo(drawX + this.width, this.y + this.height);
           ctx.closePath();
-          ctx.fillStyle = this.hit ? '#555' : '#32CD32'; // Lime Green
           ctx.fill();
-          
-          // Add a Bitcoin symbol in the middle as a fallback visual
-          ctx.fillStyle = '#F7931A'; // Bitcoin orange
-          ctx.font = `${Math.min(this.width, this.height) * 0.4}px Arial`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('₿', drawX + this.width/2, this.y + this.height/2);
-        } else if (this.type === 'box') {
-          // Draw box as a rectangle
+        } else {
+          // Draw box or rail as a rectangle
           ctx.fillRect(drawX, this.y, this.width, this.height);
-          
-          // Add a Bitcoin symbol in the middle as a fallback visual
-          ctx.fillStyle = '#F7931A'; // Bitcoin orange
-          ctx.font = `${Math.min(this.width, this.height) * 0.4}px Arial`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('₿', drawX + this.width/2, this.y + this.height/2);
-        } else if (this.type === 'rail') {
-          // Draw rail with supports
-          ctx.fillRect(drawX, this.y, this.width, this.height);
-          
-          // Draw supports
-          ctx.fillStyle = '#2C3E50';
-          const supportWidth = 5;
-          const supportSpacing = Math.min(50, this.width / 2);
-          
-          for (let x = supportSpacing/2; x < this.width; x += supportSpacing) {
-            ctx.fillRect(drawX + x - supportWidth/2, this.y + this.height, supportWidth, 20);
-          }
-          
-          // Add small Bitcoin symbols along the rail
-          ctx.fillStyle = '#F7931A'; // Bitcoin orange
-          ctx.font = `${this.height * 0.8}px Arial`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          
-          const symbolSpacing = Math.min(80, this.width / 3);
-          for (let x = symbolSpacing/2; x < this.width; x += symbolSpacing) {
-            ctx.fillText('₿', drawX + x, this.y + this.height/2);
-          }
         }
+        
+        // Add Bitcoin symbol on all obstacles
+        ctx.fillStyle = '#FFFFFF'; // White Bitcoin symbol
+        ctx.font = `${Math.min(this.width, this.height) * 0.4}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('₿', drawX + this.width/2, this.y + this.height/2);
         
         // Reset shadow
         ctx.shadowColor = 'transparent';
@@ -504,17 +455,15 @@ export default class ObstacleManager {
         };
         
         // Set source to trigger loading
-        img.src = `/images/Obstacles/${imgSrc}`;
+        if (bitcoinObstacleImages.includes(imgSrc)) {
+          img.src = `/images/Obstacles/${imgSrc}`;
+        } else {
+          img.src = `/images/${imgSrc}`;
+        }
       });
       
-      // Also preload fallbacks for each obstacle type
-      ['box', 'ramp', 'rail'].forEach(type => {
-        const img = new Image();
-        img.onload = () => {
-          console.log(`Preloaded fallback for: ${type}`);
-        };
-        img.src = `/images/obstacle-${type}.png`;
-      });
+      // Remove old fallback preloading
+      // No longer preloading obstacle type images
       
     } catch (err) {
       console.error('Error preloading obstacle images:', err);
