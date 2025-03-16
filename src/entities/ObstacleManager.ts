@@ -292,10 +292,10 @@ export default class ObstacleManager {
   lastObstacleTime: number = 0;
   minDistance: number = 300;
   spawnRate: number = 2000; // ms between obstacles
-  groundY: number = 450; // Updated from 400 to 450 to match new ground level
+  groundY: number = 400; // Raised from 450 to 400 to reduce road space
   gameSpeed: number = 200; // Starting game speed
   minObstacleSpace: number = 200; // Minimum space between obstacles
-  maxJumpableHeight: number = 60; // Maximum height player can jump over (reduced from 80)
+  maxJumpableHeight: number = 70; // Increased from 60 to 70 for larger obstacles while maintaining jumpability
   cameraOffset: number = 0;
   totalDistance: number = 0;
   
@@ -327,7 +327,7 @@ export default class ObstacleManager {
   private lastObstacleWasRapid: boolean = false; // Track if we just created a rapid succession sequence
   private initialSpeedBoost: number = 0; // Starting speed boost (now removed for playability)
   private doubleJumpObstacleChance: number = 0.08; // 8% chance of spawning obstacles that require double jumping
-  private maxDoubleJumpHeight: number = 90; // Maximum height for double-jump obstacles (regular max is 60)
+  private maxDoubleJumpHeight: number = 105; // Increased from 90 to 105 for larger obstacles while maintaining double-jump mechanics
   
   // Power-up management properties
   private timeSinceLastPowerUp: number = 0;  // Track time since last power-up spawned
@@ -783,69 +783,74 @@ export default class ObstacleManager {
         finalDifficulty = Math.min(finalDifficulty, 0.4); // Cap difficulty in easy mode
       }
       
+      // Size multiplication factor to make all obstacles larger (visual enhancement only)
+      // The height/width ratio remains the same to maintain gameplay feel
+      const sizeFactor = 1.2; // Increase all obstacle dimensions by 20%
+      
       switch (type) {
         case 'box':
           // More variance in box sizes
-          width = 25 + Math.random() * 50; // 25-75 (was 25-70)
+          width = (30 + Math.random() * 55) * sizeFactor; // Increased base size: 36-102 (was 25-75)
           
           if (isDoubleJumpObstacle) {
             // Double jump boxes are taller to require double jumping
             const doubleJumpHeight = 65 + (finalDifficulty * 25); // 65-90
-            height = Math.max(65, Math.min(this.maxDoubleJumpHeight, doubleJumpHeight));
+            height = Math.max(65, Math.min(this.maxDoubleJumpHeight, doubleJumpHeight)) * sizeFactor;
           } else if (isRapidSuccession) {
             // Rapid succession boxes are narrower and shorter
-            width = 20 + Math.random() * 25; // 20-45
+            width = (20 + Math.random() * 25) * sizeFactor; // 24-54 (was 20-45)
             const maxBoxHeight = 20 + (finalDifficulty * 15); // Lower height
-            height = 15 + Math.random() * Math.min(20, maxBoxHeight);
+            height = (15 + Math.random() * Math.min(20, maxBoxHeight)) * sizeFactor;
           } else {
             // Regular boxes with more height variation
             const maxBoxHeight = 25 + (finalDifficulty * 32); // 25-57 (was 25-55)
-            height = 20 + Math.random() * Math.min(37, maxBoxHeight);
+            height = (20 + Math.random() * Math.min(37, maxBoxHeight)) * sizeFactor;
           }
           break;
           
         case 'ramp':
           if (isDoubleJumpObstacle) {
             // Double jump ramps are taller to require double jumping
-            width = 60 + Math.random() * 40; // 60-100
+            width = (60 + Math.random() * 40) * sizeFactor; // 72-120 (was 60-100)
             const doubleJumpHeight = 70 + (finalDifficulty * 20); // 70-90
-            height = Math.max(70, Math.min(this.maxDoubleJumpHeight, doubleJumpHeight));
+            height = Math.max(70, Math.min(this.maxDoubleJumpHeight, doubleJumpHeight)) * sizeFactor;
           } else if (isRapidSuccession) {
             // Rapid succession ramps are narrower
-            width = 40 + Math.random() * 30; // 40-70
+            width = (40 + Math.random() * 30) * sizeFactor; // 48-84 (was 40-70)
             const maxRampHeight = 30 + (finalDifficulty * 15); // Lower height
-            height = 25 + Math.random() * Math.min(20, maxRampHeight);
+            height = (25 + Math.random() * Math.min(20, maxRampHeight)) * sizeFactor;
           } else {
             // Regular ramps with more variance
-            width = 50 + Math.random() * 65; // 50-115 (was 50-110)
+            width = (50 + Math.random() * 65) * sizeFactor; // 60-138 (was 50-115)
             const maxRampHeight = 35 + (finalDifficulty * 25); // 35-60
-            height = 30 + Math.random() * Math.min(30, maxRampHeight);
+            height = (30 + Math.random() * Math.min(30, maxRampHeight)) * sizeFactor;
           }
           break;
           
         case 'rail':
           if (isRapidSuccession) {
             // Rapid succession rails are shorter
-            width = 60 + Math.random() * 50; // 60-110
+            width = (60 + Math.random() * 50) * sizeFactor; // 72-132 (was 60-110)
           } else {
             // Regular rails can be longer
-            width = 70 + Math.random() * 110; // 70-180 (was 70-170)
+            width = (70 + Math.random() * 110) * sizeFactor; // 84-216 (was 70-180)
           }
-          height = 15; // Rails have fixed height
+          height = 15 * sizeFactor; // Rails have fixed height, but sized up for visibility
           break;
           
         default:
-          width = 40;
-          height = 30;
+          width = 40 * sizeFactor;
+          height = 30 * sizeFactor;
       }
       
       // Make sure height is jumpable with appropriate jump type
+      // We're scaling up the visuals, but need to ensure gameplay constraints are maintained
       height = isDoubleJumpObstacle 
-        ? Math.min(height, this.maxDoubleJumpHeight) 
-        : Math.min(height, this.maxJumpableHeight);
+        ? Math.min(height, this.maxDoubleJumpHeight * sizeFactor) 
+        : Math.min(height, this.maxJumpableHeight * sizeFactor);
       
       // Track difficulty of this obstacle
-      this.lastObstacleDifficulty = (height / (isDoubleJumpObstacle ? this.maxDoubleJumpHeight : this.maxJumpableHeight)) * 0.7 + (width / 180) * 0.3;
+      this.lastObstacleDifficulty = (height / (isDoubleJumpObstacle ? this.maxDoubleJumpHeight * sizeFactor : this.maxJumpableHeight * sizeFactor)) * 0.7 + (width / (180 * sizeFactor)) * 0.3;
       
       // Place obstacle with more aggressive positioning
       const surpriseOffset = Math.random() < 0.35 ? Math.random() * 150 : 0; // More surprise offsets (was 0.25)
@@ -899,6 +904,9 @@ export default class ObstacleManager {
   // Create a stacked obstacle on top of an existing one
   private createStackedObstacle(baseObstacle: Obstacle, difficultyFactor: number) {
     try {
+      // Size multiplication factor to match the main obstacle sizing
+      const sizeFactor = 1.2; // Keep consistent with createRandomObstacle
+
       // Determine what type of obstacle to stack
       // Avoid rails on top of things - that's weird
       const stackTypes: ObstacleType[] = ['box', 'ramp'];
@@ -909,17 +917,17 @@ export default class ObstacleManager {
       
       // Calculate the max height based on maxJumpableHeight and base obstacle
       // Total height (base + stacked) should not exceed what a double jump can clear
-      const availableHeight = this.maxJumpableHeight - baseObstacle.height;
+      const availableHeight = (this.maxJumpableHeight * sizeFactor) - baseObstacle.height;
       
       // If there's not enough height left, don't create a stacked obstacle
-      if (availableHeight < 15) return null;
+      if (availableHeight < 15 * sizeFactor) return null;
       
       // Create smaller obstacle for the top - more random positioning
       switch (randomType) {
         case 'box':
           // Boxes are smaller on top, and could be offset to either side
           width = baseObstacle.width * (0.4 + Math.random() * 0.5); // 40-90% of base width (was 50-80%)
-          height = 15 + Math.random() * Math.min(18, availableHeight - 10); // 15-33px (was 15-30px)
+          height = (15 + Math.random() * Math.min(18, availableHeight / sizeFactor - 10)) * sizeFactor; // Adjusted for size factor
           
           // Offset within base to look stacked/balanced - more varied positions
           offsetX = Math.random() * (baseObstacle.width - width);
@@ -927,7 +935,7 @@ export default class ObstacleManager {
         case 'ramp':
           // Ramps are angled, so can be wider on top
           width = baseObstacle.width * (0.5 + Math.random() * 0.4); // 50-90% of base width (was 60-90%)
-          height = 20 + Math.random() * Math.min(18, availableHeight - 10); // 20-38px (was 20-35px)
+          height = (20 + Math.random() * Math.min(18, availableHeight / sizeFactor - 10)) * sizeFactor; // Adjusted for size factor
           
           // Position ramp for interesting configurations
           offsetX = Math.random() < 0.5 ? 
@@ -938,9 +946,12 @@ export default class ObstacleManager {
           break;
         default:
           width = baseObstacle.width * 0.7;
-          height = Math.min(20, availableHeight);
+          height = Math.min(20 * sizeFactor, availableHeight);
           offsetX = baseObstacle.width * 0.15;
       }
+      
+      // Ensure the stacked obstacle height doesn't exceed available height
+      height = Math.min(height, availableHeight);
       
       // Create the stacked obstacle
       const stackedObstacle = new Obstacle(

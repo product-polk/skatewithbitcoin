@@ -42,7 +42,7 @@ interface BackgroundImages {
 
 export const Canvas: React.FC<GameProps> = ({ 
   width = 1000, 
-  height = 600,
+  height = 500,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [fps, setFps] = useState(0);
@@ -109,7 +109,7 @@ export const Canvas: React.FC<GameProps> = ({
     const imageDimensions = {
       sky: { width: 0, height: 0 },
       mountains: { width: 0, height: 0 },
-      buildings: { width: 1600, height: 450 }, // Extend to the new ground level (450px)
+      buildings: { width: 1600, height: 400 }, // Extend to the new ground level (400px)
       ground: { width: 1600, height: 150 }
     };
     
@@ -391,7 +391,7 @@ export const Canvas: React.FC<GameProps> = ({
         floatingScoresRef.current = []; // Clear all floating score indicators
         
         // Reset player position and state
-        playerRef.current.reset(100, 330);
+        playerRef.current.reset(100, 300);
         playerRef.current.state = 'skating';
         
         // Clear and reset obstacles
@@ -438,15 +438,15 @@ export const Canvas: React.FC<GameProps> = ({
           
           // Use background image for loading screen if loaded
           if (backgroundImagesLoaded && backgroundImagesRef.current.buildings) {
-            // Draw buildings to end at ground level (y=450)
+            // Draw buildings to end at ground level (y=400)
             ctx.drawImage(
               backgroundImagesRef.current.buildings,
-              0, 0, canvas.width, 450
+              0, 0, canvas.width, 400
             );
             
             // Draw ground if available
             if (backgroundImagesRef.current.ground) {
-              const groundY = 450;
+              const groundY = 400;
               const groundHeight = canvas.height - groundY;
               ctx.drawImage(
                 backgroundImagesRef.current.ground,
@@ -496,12 +496,13 @@ export const Canvas: React.FC<GameProps> = ({
       console.log('Obstacle manager created');
       
       // Create player with appropriate jump height
+      console.log('Setting up player');
       const player = new Player({
         x: 100,
-        y: 330,
-        width: 60,
-        height: 120,
-        speed: 200,
+        y: 300, // Adjusted from 330 to align better with the ground level at 400
+        width: 50,
+        height: 100,
+        speed: 100, // Reduced from 200 to 100 for a slower start
         jumpForce: 500,
         gravity: 1200
       });
@@ -581,7 +582,7 @@ export const Canvas: React.FC<GameProps> = ({
             floatingScoresRef.current = []; // Clear all floating score indicators
             
             // Reset player position and state
-            player.reset(100, 330);
+            player.reset(100, 300); // Adjusted from 330 to align better with the ground level at 400
             player.state = 'skating';
             
             // Clear and reset obstacles
@@ -761,8 +762,12 @@ export const Canvas: React.FC<GameProps> = ({
       // Render function
       gameLoop.setRenderCallback(() => {
         try {
-          // Clear canvas - change the background to match ground color instead of blue/black
-          ctx.fillStyle = '#3e291e'; // Match the ground color
+          // Create a gradient sky background for a more visually appealing game
+          const skyGradient = ctx.createLinearGradient(0, 0, 0, 400);  // Gradient stops at ground level
+          skyGradient.addColorStop(0, '#4B79A1'); // Darker blue at top
+          skyGradient.addColorStop(1, '#A7BFE8'); // Lighter blue near ground
+          
+          ctx.fillStyle = skyGradient;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           
           if (!gameStarted) {
@@ -777,74 +782,54 @@ export const Canvas: React.FC<GameProps> = ({
           if (backgroundImagesLoaded && bgImages.buildings) {
             const buildingParallax = cameraOffsetRef.current * 0.5;
             
-            // Draw the buildings image to end at ground level (y=450)
+            // Draw the buildings image to end at ground level (y=400)
             // Draw the image twice to create a seamless loop
             ctx.drawImage(
               bgImages.buildings,
               -buildingParallax % bgImages.buildings.width,
               0, // Start from the top of the canvas
               bgImages.buildings.width,
-              450 // End at the ground level (y=450)
+              400 // End at the ground level (y=400)
             );
             ctx.drawImage(
               bgImages.buildings,
               (-buildingParallax % bgImages.buildings.width) + bgImages.buildings.width,
               0, // Start from the top of the canvas
               bgImages.buildings.width,
-              450 // End at the ground level (y=450)
+              400 // End at the ground level (y=400)
             );
           } else {
-            // Fallback if image not loaded
-            ctx.fillStyle = '#222';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Fallback if building image not loaded - dark gradient background
+            const fallbackBgGradient = ctx.createLinearGradient(0, 0, 0, 400);
+            fallbackBgGradient.addColorStop(0, '#2C3E50'); // Dark blue at top
+            fallbackBgGradient.addColorStop(1, '#4B6CB7'); // Medium blue near ground
+            
+            ctx.fillStyle = fallbackBgGradient;
+            ctx.fillRect(0, 0, canvas.width, 400); // Fill only to ground level
             
             // Draw some simple buildings as fallback
             ctx.fillStyle = '#333';
             for (let i = 0; i < 5; i++) {
               const buildingX = ((i * 200) - ((cameraOffsetRef.current * 0.5) % 200));
               const buildingHeight = 100 + (i % 3) * 50;
-              ctx.fillRect(buildingX, 450 - buildingHeight, 100, buildingHeight);
+              ctx.fillRect(buildingX, 400 - buildingHeight, 100, buildingHeight);
             }
           }
           
-          // Draw ground with camera offset and parallax
-          if (backgroundImagesLoaded && bgImages.ground) {
-            const groundParallax = cameraOffsetRef.current * 1.0; // Full parallax for ground
-            
-            // Calculate the exact position once to avoid redundant calculations
-            const groundWidth = bgImages.ground.width;
-            const groundHeight = canvas.height - 450; // Adjust ground height to fill the entire bottom
-            const groundY = 450;
-            const parallaxOffset = -groundParallax % groundWidth;
-            
-            // Use double buffering technique - only draw what's visible plus a small buffer
-            // Draw first copy
-            ctx.drawImage(
-              bgImages.ground,
-              parallaxOffset,
-              groundY,
-              groundWidth, 
-              groundHeight
-            );
-            
-            // Draw second copy only if it would be visible on screen
-            if (parallaxOffset + groundWidth < canvas.width) {
-              ctx.drawImage(
-                bgImages.ground,
-                parallaxOffset + groundWidth,
-                groundY,
-                groundWidth,
-                groundHeight
-              );
+          // Draw ground based on new ground level
+          if (backgroundImagesLoaded && backgroundImagesRef.current.ground) {
+            // Use loaded background image for ground
+            const groundPattern = ctx.createPattern(backgroundImagesRef.current.ground, 'repeat');
+            if (groundPattern) {
+              ctx.fillStyle = groundPattern;
+              // Fill the ground to the bottom of the canvas (exactly to the height)
+              ctx.fillRect(0, 400, canvas.width, canvas.height - 400);
             }
-            
-            // Draw additional ground fill beneath to ensure no blue showing
-            ctx.fillStyle = '#3e291e'; // Match ground color
-            ctx.fillRect(0, groundY + groundHeight, canvas.width, canvas.height - (groundY + groundHeight));
           } else {
             // Efficient fallback - just draw the ground once
             ctx.fillStyle = '#3e291e'; // Dark brown for ground
-            ctx.fillRect(0, 450, canvas.width, canvas.height - 450);
+            // Fill the ground to the bottom of the canvas (exactly to the height)
+            ctx.fillRect(0, 400, canvas.width, canvas.height - 400);
             
             // Draw fewer ground lines for better performance
             const visibleWidth = canvas.width;
@@ -857,8 +842,9 @@ export const Canvas: React.FC<GameProps> = ({
             
             for (let i = 0; i < linesNeeded; i++) {
               const lineX = ((i * lineSpacing) - (cameraOffsetRef.current % lineSpacing));
-              ctx.moveTo(lineX, 450);
-              ctx.lineTo(lineX + 60, 500);
+              ctx.moveTo(lineX, 400);
+              // Adjust the ground lines to reach towards the bottom
+              ctx.lineTo(lineX + 40, Math.min(450, canvas.height - 10));
             }
             ctx.stroke();
           }
@@ -962,8 +948,8 @@ export const Canvas: React.FC<GameProps> = ({
             // Get the parent container dimensions
             const container = canvas.parentElement;
             if (container) {
-              // Get available space (accounting for minimal UI elements)
-              const availableHeight = window.innerHeight - 30; // Smaller footer buffer
+              // Get available space (with minimal buffers)
+              const availableHeight = window.innerHeight - 20; // Reduced buffer from 30px to 20px
               const availableWidth = container.clientWidth;
               
               console.log(`Available space: ${availableWidth}x${availableHeight}`);
@@ -976,11 +962,11 @@ export const Canvas: React.FC<GameProps> = ({
               
               if (availableWidth / availableHeight > aspectRatio) {
                 // Container is wider than needed - use most of available height
-                newHeight = availableHeight * 0.95; // Use 95% of available height
+                newHeight = availableHeight * 0.98; // Increased from 95% to 98% of available height
                 newWidth = newHeight * aspectRatio;
               } else {
                 // Container is taller - use most of available width
-                newWidth = availableWidth * 0.98; // Use 98% of available width
+                newWidth = availableWidth * 0.98; // Maintain 98% of available width
                 newHeight = newWidth / aspectRatio;
               }
               
@@ -1080,45 +1066,6 @@ export const Canvas: React.FC<GameProps> = ({
     }
   }, [gameStarted]);
   
-  // Insert attribution directly into document body
-  useEffect(() => {
-    // Create attribution element
-    const attributionElement = document.createElement('div');
-    attributionElement.id = 'skatewithbitcoin-attribution';
-    attributionElement.style.position = 'fixed';
-    attributionElement.style.bottom = '0';
-    attributionElement.style.left = '0';
-    attributionElement.style.right = '0';
-    attributionElement.style.backgroundColor = 'rgba(30, 30, 30, 0.85)';
-    attributionElement.style.color = 'white';
-    attributionElement.style.textAlign = 'center';
-    attributionElement.style.padding = '12px';
-    attributionElement.style.fontWeight = 'bold';
-    attributionElement.style.zIndex = '100000';
-    attributionElement.style.fontSize = '16px';
-    attributionElement.style.boxShadow = '0 -2px 10px rgba(0,0,0,0.3)';
-    
-    // Set content
-    attributionElement.innerHTML = 'If you like the game, follow me <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; font-weight: 800; text-decoration: none;">@jas_jaski</a>';
-    
-    // Check if element already exists
-    const existingElement = document.getElementById('skatewithbitcoin-attribution');
-    if (existingElement) {
-      document.body.removeChild(existingElement);
-    }
-    
-    // Append to body
-    document.body.appendChild(attributionElement);
-    
-    // Cleanup function
-    return () => {
-      const element = document.getElementById('skatewithbitcoin-attribution');
-      if (element) {
-        document.body.removeChild(element);
-      }
-    };
-  }, []);
-  
   // Play background music when game starts
   useEffect(() => {
     if (gameStarted && soundManagerRef.current && soundEnabled) {
@@ -1208,88 +1155,6 @@ export const Canvas: React.FC<GameProps> = ({
           </div>
         )}
         
-        {/* Control buttons container */}
-        <div 
-          style={{
-            position: 'absolute',
-            top: '100px',
-            right: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px'
-          }}
-        >
-          {/* Restart Game Button removed */}
-          
-          {/* Sound Toggle Button */}
-          <button 
-            onClick={toggleSound}
-            style={{
-              backgroundColor: soundEnabled ? 'rgba(55, 65, 81, 0.85)' : 'rgba(239, 68, 68, 0.85)',
-              color: 'white',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 'bold',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px'
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-            }}
-          >
-            {soundEnabled ? '🔊 Sound On' : '🔇 Sound Off'}
-          </button>
-          
-          {/* High Scores Button with enhanced styling */}
-          <button 
-            id="highscores-toggle-button"
-            onClick={showHighScores}
-            style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.85)',
-              color: 'white',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 'bold',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              zIndex: 100
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
-              e.currentTarget.style.backgroundColor = 'rgba(37, 99, 235, 0.85)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-              e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.85)';
-            }}
-          >
-            📊 Leaderboard
-          </button>
-        </div>
-        
         {/* Game Over Screen - Only show Start Game button, not Restart */}
         <div className="absolute bottom-16 left-0 right-0 flex justify-center">
           {!gameStarted && (
@@ -1325,6 +1190,105 @@ export const Canvas: React.FC<GameProps> = ({
               Start Game
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Footer bar with attribution and buttons */}
+      <div 
+        style={{
+          position: 'fixed',
+          bottom: '0',
+          left: '0',
+          right: '0',
+          backgroundColor: 'rgba(30, 30, 30, 0.85)',
+          padding: '12px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          zIndex: '100000',
+          boxShadow: '0 -2px 10px rgba(0,0,0,0.3)'
+        }}
+      >
+        {/* Attribution message */}
+        <div 
+          style={{
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: '16px'
+          }}
+        >
+          If you like the game, follow me <a href="https://x.com/jas_jaski" target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', fontWeight: 800, textDecoration: 'none'}}>@jas_jaski</a>
+        </div>
+        
+        {/* Game control buttons */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {/* Sound Toggle Button */}
+          <button 
+            onClick={toggleSound}
+            style={{
+              backgroundColor: soundEnabled ? 'rgba(55, 65, 81, 0.85)' : 'rgba(239, 68, 68, 0.85)',
+              color: 'white',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+            }}
+          >
+            {soundEnabled ? '🔊 Sound On' : '🔇 Sound Off'}
+          </button>
+          
+          {/* High Scores Button */}
+          <button 
+            id="highscores-toggle-button"
+            onClick={showHighScores}
+            style={{
+              backgroundColor: 'rgba(59, 130, 246, 0.85)',
+              color: 'white',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              zIndex: 100
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
+              e.currentTarget.style.backgroundColor = 'rgba(37, 99, 235, 0.85)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+              e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.85)';
+            }}
+          >
+            📊 Leaderboard
+          </button>
         </div>
       </div>
 

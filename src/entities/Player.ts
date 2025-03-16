@@ -144,7 +144,8 @@ export default class Player {
       
       // Always move forward when skating
       if (this.state === 'skating') {
-        this.velocityX = this.speed;
+        // Set speed to 80% of max speed during regular skating for a more moderate pace
+        this.velocityX = this.speed * 0.8;
       } else if (this.state === 'jumping' || this.state === 'falling') {
         // In air, maintain forward momentum but can still adjust
         const airControl = 0.3; // Reduced control in air
@@ -190,19 +191,17 @@ export default class Player {
         }
       }
       
-      // Simple ground collision (temporary)
-      const groundY = 450; // Updated ground height
+      // Check if player is on ground
+      const groundY = 400; // Updated ground height to match new settings
       if (this.y + this.height > groundY) {
         this.y = groundY - this.height;
         this.velocityY = 0;
         this.onGround = true;
         
-        // Reset double jump when landing
-        this.canDoubleJump = false;
-        
-        // Land from jump
+        // If we were jumping or falling, we're now skating
         if (this.state === 'jumping' || this.state === 'falling') {
-          this.land();
+          this.state = 'skating';
+          this.canDoubleJump = false; // Reset double jump ability when landing
         }
       }
     } catch (err) {
@@ -237,7 +236,7 @@ export default class Player {
         }
         
         if (inputManager.isPressed('right')) {
-          this.velocityX = Math.min(this.velocityX + 30, this.speed * 1.5); // Speed up
+          this.velocityX = Math.min(this.velocityX + 20, this.speed * 1.5); // Reduced acceleration from 30 to 20, keep max speed the same
         }
       }
       
@@ -518,7 +517,7 @@ export default class Player {
       this.powerUpMessageTimer = 0;
       
       // Set a default speed when game starts
-      this.velocityX = this.speed * 0.5;
+      this.velocityX = this.speed * 0.35; // Reduced from 0.5 to 0.35 for an even slower initial start
       
       this.trickCompleted = false;
       
@@ -638,7 +637,7 @@ export default class Player {
         const boardWidth = this.width + 20; // Increased from +10 to +20
         const boardHeight = 10; // Increased from 5 to 10
         const boardX = screenX - 10; // Adjust position for the width increase
-        const boardY = this.y + this.height - 5 + yOffset;
+        const boardY = this.y + this.height - 15 + yOffset; // Raised by 10px to better align with player's feet
         
         ctx.save();
         ctx.translate(boardX + boardWidth / 2, boardY + boardHeight / 2);
@@ -706,7 +705,7 @@ export default class Player {
         const boardWidth = this.width + 20; // Increased from +10 to +20
         const boardHeight = 10; // Increased from 5 to 10
         const boardX = screenX - 10; // Adjust position for the width increase
-        const boardY = this.y + this.height - 5 + yOffset;
+        const boardY = this.y + this.height - 15 + yOffset; // Raised by 10px to better align with player's feet
         
         if (this.imagesLoaded && this.skateboardImage) {
           // Draw skateboard image with increased dimensions
