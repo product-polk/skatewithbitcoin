@@ -1152,7 +1152,7 @@ export const Canvas: React.FC<GameProps> = ({
 
   return (
     <div className="fixed inset-0 flex flex-col bg-black overflow-hidden">
-      {/* Main game container - takes all space */}
+      {/* Main game container - takes all space, including area for controls */}
       <div className="flex-grow relative w-full flex items-center justify-center bg-black overflow-hidden">
         <canvas
           ref={canvasRef}
@@ -1263,7 +1263,7 @@ export const Canvas: React.FC<GameProps> = ({
                 >
                   {isMobile ? (
                     <>Tap <strong>Jump</strong> to jump | Tap <strong>←/→</strong> to control speed<br/>
-                    Tap <strong>Trick</strong> to use power-ups (when available)</>
+                    Tap <strong>Stunt</strong> to use power-ups (when available)</>
                   ) : (
                     <><span style={{ fontWeight: 'bold' }}>SPACE/UP</span> = Jump | <span style={{ fontWeight: 'bold' }}>LEFT/RIGHT</span> = Control Speed<br/>
                     <span style={{ fontWeight: 'bold' }}>ANY KEY (except SPACE)</span> = Use power-ups (when available)</>
@@ -1276,15 +1276,15 @@ export const Canvas: React.FC<GameProps> = ({
         
         {/* Game Over Screen - Only show Start Game button, not Restart */}
         <div className="absolute bottom-16 left-0 right-0 flex justify-center">
-          {!gameStarted && !showOrientationPrompt && (
+          {!gameStarted && !showOrientationPrompt && !isMobile && (
             <button 
               onClick={handleStartGame}
               style={{
                 backgroundColor: 'rgba(22, 163, 74, 0.85)',
                 color: 'white',
-                padding: isMobile ? '16px 32px' : '12px 24px',
+                padding: '12px 24px',
                 borderRadius: '8px',
-                fontSize: isMobile ? '20px' : '16px',
+                fontSize: '16px',
                 fontWeight: 'bold',
                 backdropFilter: 'blur(4px)',
                 border: '1px solid rgba(255,255,255,0.1)',
@@ -1310,191 +1310,222 @@ export const Canvas: React.FC<GameProps> = ({
             </button>
           )}
         </div>
+        
+        {/* Mobile-specific Start Game button - large and centered */}
+        {!gameStarted && !showOrientationPrompt && isMobile && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <button 
+              onClick={handleStartGame}
+              style={{
+                backgroundColor: 'rgba(22, 163, 74, 0.9)',
+                color: 'white',
+                padding: '24px 40px',
+                borderRadius: '12px',
+                fontSize: '28px',
+                fontWeight: 'bold',
+                border: '3px solid rgba(255,255,255,0.3)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                animation: 'pulse 1.5s infinite',
+                width: '80%',
+                maxWidth: '300px'
+              }}
+            >
+              TAP TO START
+            </button>
+          </div>
+        )}
+        
+        {/* Mobile touch controls - now positioned as overlay directly on game canvas */}
+        {isMobile && gameStarted && !playerRef.current?.crashed && !showOrientationPrompt && !isHighScoresOpen && (
+          <div className="absolute bottom-16 left-0 right-0 flex justify-between px-4 z-40">
+            {/* Left side controls - movement */}
+            <div className="flex gap-2">
+              <button
+                onTouchStart={() => {
+                  if (inputManagerRef.current) {
+                    // Use keydown/keyup directly instead of setKeyState
+                    const event = new KeyboardEvent('keydown', { code: 'ArrowLeft', key: 'ArrowLeft' });
+                    document.dispatchEvent(event);
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (inputManagerRef.current) {
+                    const event = new KeyboardEvent('keyup', { code: 'ArrowLeft', key: 'ArrowLeft' });
+                    document.dispatchEvent(event);
+                  }
+                }}
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(0,0,0,0.6)',
+                  color: 'white',
+                  fontSize: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+                }}
+              >
+                ←
+              </button>
+              <button
+                onTouchStart={() => {
+                  if (inputManagerRef.current) {
+                    const event = new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight' });
+                    document.dispatchEvent(event);
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (inputManagerRef.current) {
+                    const event = new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight' });
+                    document.dispatchEvent(event);
+                  }
+                }}
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(0,0,0,0.6)',
+                  color: 'white',
+                  fontSize: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+                }}
+              >
+                →
+              </button>
+            </div>
+            
+            {/* Right side controls - jump and tricks */}
+            <div className="flex gap-2">
+              <button
+                onTouchStart={() => {
+                  if (inputManagerRef.current) {
+                    // Any key except Space to perform a trick
+                    const event = new KeyboardEvent('keydown', { code: 'KeyT', key: 't' });
+                    document.dispatchEvent(event);
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (inputManagerRef.current) {
+                    const event = new KeyboardEvent('keyup', { code: 'KeyT', key: 't' });
+                    document.dispatchEvent(event);
+                  }
+                }}
+                style={{
+                  width: '80px',
+                  height: '60px',
+                  borderRadius: '30px',
+                  backgroundColor: 'rgba(79, 70, 229, 0.8)',
+                  color: 'white',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+                }}
+              >
+                STUNT
+              </button>
+              <button
+                onTouchStart={() => {
+                  if (inputManagerRef.current) {
+                    const event = new KeyboardEvent('keydown', { code: 'Space', key: ' ' });
+                    document.dispatchEvent(event);
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (inputManagerRef.current) {
+                    const event = new KeyboardEvent('keyup', { code: 'Space', key: ' ' });
+                    document.dispatchEvent(event);
+                  }
+                }}
+                style={{
+                  width: '80px',
+                  height: '60px',
+                  borderRadius: '30px',
+                  backgroundColor: 'rgba(22, 163, 74, 0.8)',
+                  color: 'white',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+                }}
+              >
+                JUMP
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Restart button for mobile when crashed - large centered restart button */}
+        {playerRef.current?.crashed && isMobile && !isHighScoresOpen && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <button
+              onClick={handleRestartGame}
+              className="pointer-events-auto"
+              style={{
+                backgroundColor: 'rgba(22, 163, 74, 0.9)',
+                color: 'white',
+                padding: '20px 40px',
+                borderRadius: '12px',
+                fontSize: '28px',
+                fontWeight: 'bold',
+                border: '3px solid rgba(255,255,255,0.5)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                animation: 'pulse 1.5s infinite',
+                width: '80%',
+                maxWidth: '300px'
+              }}
+            >
+              TAP TO RESTART
+            </button>
+          </div>
+        )}
+
+        {/* Alternative restart button at bottom of screen - always visible on game over */}
+        {playerRef.current?.crashed && isMobile && !isHighScoresOpen && (
+          <div className="absolute bottom-28 left-0 right-0 flex justify-center z-50">
+            <button
+              onClick={handleRestartGame}
+              style={{
+                backgroundColor: 'rgba(79, 70, 229, 0.9)',
+                color: 'white',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontSize: '18px',
+                fontWeight: 'bold',
+                border: '2px solid rgba(255,255,255,0.3)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+              }}
+            >
+              Restart Game
+            </button>
+          </div>
+        )}
+
+        {/* Debug info for mobile */}
+        {isMobile && playerRef.current?.crashed && (
+          <div className="absolute top-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-1 z-50">
+            <div>Mobile: {isMobile ? '✅' : '❌'} | Touch: {touchControlsVisible ? '✅' : '❌'} | Crashed: {playerRef.current?.crashed ? '✅' : '❌'}</div>
+          </div>
+        )}
       </div>
 
-      {/* Mobile touch controls */}
-      {isMobile && gameStarted && !playerRef.current?.crashed && !showOrientationPrompt && !isHighScoresOpen && (
-        <div className="fixed bottom-20 left-0 right-0 flex justify-between px-4 z-40">
-          {/* Left side controls - movement */}
-          <div className="flex gap-2">
-            <button
-              onTouchStart={() => {
-                if (inputManagerRef.current) {
-                  // Use keydown/keyup directly instead of setKeyState
-                  const event = new KeyboardEvent('keydown', { code: 'ArrowLeft', key: 'ArrowLeft' });
-                  document.dispatchEvent(event);
-                }
-              }}
-              onTouchEnd={() => {
-                if (inputManagerRef.current) {
-                  const event = new KeyboardEvent('keyup', { code: 'ArrowLeft', key: 'ArrowLeft' });
-                  document.dispatchEvent(event);
-                }
-              }}
-              style={{
-                width: '60px',
-                height: '60px',
-                borderRadius: '50%',
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                color: 'white',
-                fontSize: '24px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px solid rgba(255,255,255,0.3)',
-                boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-              }}
-            >
-              ←
-            </button>
-            <button
-              onTouchStart={() => {
-                if (inputManagerRef.current) {
-                  const event = new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight' });
-                  document.dispatchEvent(event);
-                }
-              }}
-              onTouchEnd={() => {
-                if (inputManagerRef.current) {
-                  const event = new KeyboardEvent('keyup', { code: 'ArrowRight', key: 'ArrowRight' });
-                  document.dispatchEvent(event);
-                }
-              }}
-              style={{
-                width: '60px',
-                height: '60px',
-                borderRadius: '50%',
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                color: 'white',
-                fontSize: '24px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px solid rgba(255,255,255,0.3)',
-                boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-              }}
-            >
-              →
-            </button>
-          </div>
-          
-          {/* Right side controls - jump and tricks */}
-          <div className="flex gap-2">
-            <button
-              onTouchStart={() => {
-                if (inputManagerRef.current) {
-                  // Any key except Space to perform a trick
-                  const event = new KeyboardEvent('keydown', { code: 'KeyT', key: 't' });
-                  document.dispatchEvent(event);
-                }
-              }}
-              onTouchEnd={() => {
-                if (inputManagerRef.current) {
-                  const event = new KeyboardEvent('keyup', { code: 'KeyT', key: 't' });
-                  document.dispatchEvent(event);
-                }
-              }}
-              style={{
-                width: '80px',
-                height: '60px',
-                borderRadius: '30px',
-                backgroundColor: 'rgba(79, 70, 229, 0.8)',
-                color: 'white',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px solid rgba(255,255,255,0.3)',
-                boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-              }}
-            >
-              TRICK
-            </button>
-            <button
-              onTouchStart={() => {
-                if (inputManagerRef.current) {
-                  const event = new KeyboardEvent('keydown', { code: 'Space', key: ' ' });
-                  document.dispatchEvent(event);
-                }
-              }}
-              onTouchEnd={() => {
-                if (inputManagerRef.current) {
-                  const event = new KeyboardEvent('keyup', { code: 'Space', key: ' ' });
-                  document.dispatchEvent(event);
-                }
-              }}
-              style={{
-                width: '80px',
-                height: '60px',
-                borderRadius: '30px',
-                backgroundColor: 'rgba(22, 163, 74, 0.8)',
-                color: 'white',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px solid rgba(255,255,255,0.3)',
-                boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-              }}
-            >
-              JUMP
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Restart button for mobile when crashed - large centered restart button */}
-      {playerRef.current?.crashed && isMobile && !isHighScoresOpen && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none">
-          <button
-            onClick={handleRestartGame}
-            className="pointer-events-auto"
-            style={{
-              backgroundColor: 'rgba(22, 163, 74, 0.9)',
-              color: 'white',
-              padding: '20px 40px',
-              borderRadius: '12px',
-              fontSize: '28px',
-              fontWeight: 'bold',
-              border: '3px solid rgba(255,255,255,0.5)',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-              animation: 'pulse 1.5s infinite',
-              width: '80%',
-              maxWidth: '300px'
-            }}
-          >
-            TAP TO RESTART
-          </button>
-        </div>
-      )}
-
-      {/* Alternative restart button at bottom of screen - always visible on game over */}
-      {playerRef.current?.crashed && isMobile && !isHighScoresOpen && (
-        <div className="fixed bottom-28 left-0 right-0 flex justify-center z-50">
-          <button
-            onClick={handleRestartGame}
-            style={{
-              backgroundColor: 'rgba(79, 70, 229, 0.9)',
-              color: 'white',
-              padding: '12px 24px',
-              borderRadius: '8px',
-              fontSize: '18px',
-              fontWeight: 'bold',
-              border: '2px solid rgba(255,255,255,0.3)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-            }}
-          >
-            Restart Game
-          </button>
-        </div>
-      )}
-
-      {/* Footer bar with attribution and buttons */}
+      {/* Footer bar with attribution and buttons - now positioned absolutely to avoid layout shifts */}
       <div 
         style={{
-          position: 'fixed',
+          position: 'absolute',
           bottom: '0',
           left: '0',
           right: '0',
@@ -1503,7 +1534,7 @@ export const Canvas: React.FC<GameProps> = ({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          zIndex: '100000',
+          zIndex: '1000',
           boxShadow: '0 -2px 10px rgba(0,0,0,0.3)'
         }}
       >
@@ -1593,13 +1624,6 @@ export const Canvas: React.FC<GameProps> = ({
           </button>
         </div>
       </div>
-
-      {/* Debug info for mobile */}
-      {isMobile && playerRef.current?.crashed && (
-        <div className="fixed top-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-1 z-50">
-          <div>Mobile: {isMobile ? '✅' : '❌'} | Touch: {touchControlsVisible ? '✅' : '❌'} | Crashed: {playerRef.current?.crashed ? '✅' : '❌'}</div>
-        </div>
-      )}
 
       {/* High Scores Modal */}
       <HighScores 
