@@ -1,38 +1,8 @@
 [
   {
-    "id": "default_1",
-    "name": "Bitcoin Pro",
-    "score": 1000,
-    "date": "2023-10-22T12:00:00.000Z"
-  },
-  {
-    "id": "default_2",
-    "name": "Skateboard Legend",
-    "score": 750,
-    "date": "2023-10-22T12:00:00.000Z"
-  },
-  {
-    "id": "default_3",
-    "name": "Rookie Skater",
-    "score": 250,
-    "date": "2023-10-22T12:00:00.000Z"
-  },
-  {
-    "id": "device_802713",
-    "score": 53,
-    "name": "Jaski",
-    "date": "2025-03-16T12:09:34.807Z"
-  },
-  {
-    "id": "device_376058",
-    "score": 16,
-    "name": "J",
-    "date": "2025-03-14T20:31:42.244Z"
-  },
-  {
-    "id": "device_346288",
-    "score": 6,
-    "name": "Js",
-    "date": "2025-03-14T15:33:16.779Z"
+    "id": "satoshi_nakamoto",
+    "name": "Satoshi Nakamoto",
+    "score": 21000000,
+    "date": "2009-01-03T18:15:05.000Z"
   }
 ]
