@@ -69,6 +69,27 @@ The game supports custom images for:
 
 See [CUSTOM_IMAGES_GUIDE.md](CUSTOM_IMAGES_GUIDE.md) for detailed instructions on preparing and adding your own custom images.
 
+## Deployment
+
+### Global Leaderboard Setup
+
+The game uses Upstash Redis for storing global high scores. To set this up:
+
+1. Deploy the project to Vercel
+2. From your Vercel dashboard, go to "Storage" → "Continue" → "Upstash"
+3. Create a new Redis database:
+   - Name it (e.g., "skatewithbitcoin-leaderboard")
+   - Choose a region close to your users
+   - Select your preferred plan (free tier works for development)
+4. Connect the Redis database to your project
+5. Vercel will automatically add the following environment variables to your project:
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+
+These values can also be found in your Upstash dashboard after creating the database.
+
+For local development, copy these values to a `.env.local` file in your project root.
+
 ## License
 
 MIT 

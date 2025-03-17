@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
+import { Redis } from '@upstash/redis';
 
 // Define the high score data structure
 type HighScore = {
@@ -12,8 +11,14 @@ type HighScore = {
   date: string;
 };
 
-// Path to the high scores JSON file
-const HIGH_SCORES_FILE = path.join(process.cwd(), 'data', 'highscores.json');
+// Initialize Redis client
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL || '',
+  token: process.env.KV_REST_API_TOKEN || '',
+});
+
+// Key for high scores in Redis
+const HIGH_SCORES_KEY = 'stanskate:highscores';
 
 // Secret key for sats verification
 // In a production app, this would be an environment variable
@@ -34,20 +39,13 @@ function verifyScoreHash(score: number, deviceId: string, timestamp: string, has
   );
 }
 
-// Ensure the data directory exists
-const ensureDataDir = () => {
-  const dataDir = path.join(process.cwd(), 'data');
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-};
-
-// Read high scores from file
-const getHighScores = (): HighScore[] => {
+// Read high scores from Redis
+const getHighScores = async (): Promise<HighScore[]> => {
   try {
-    ensureDataDir();
-    if (!fs.existsSync(HIGH_SCORES_FILE)) {
-      // Create with some default data if file doesn't exist
+    const highScores = await redis.get<HighScore[]>(HIGH_SCORES_KEY);
+    
+    if (!highScores) {
+      // Create with some default data if no scores exist
       const defaultData: HighScore[] = [
         {
           id: 'default_1',
@@ -68,22 +66,21 @@ const getHighScores = (): HighScore[] => {
           date: new Date().toISOString()
         }
       ];
-      saveHighScores(defaultData);
+      await saveHighScores(defaultData);
       return defaultData;
     }
-    const data = fs.readFileSync(HIGH_SCORES_FILE, 'utf-8');
-    return JSON.parse(data);
+    
+    return highScores;
   } catch (error) {
     console.error('Error reading high scores:', error);
     return [];
   }
 };
 
-// Save high scores to file
-const saveHighScores = (highScores: HighScore[]) => {
+// Save high scores to Redis
+const saveHighScores = async (highScores: HighScore[]): Promise<void> => {
   try {
-    ensureDataDir();
-    fs.writeFileSync(HIGH_SCORES_FILE, JSON.stringify(highScores, null, 2));
+    await redis.set(HIGH_SCORES_KEY, highScores);
   } catch (error) {
     console.error('Error saving high scores:', error);
   }
@@ -91,7 +88,7 @@ const saveHighScores = (highScores: HighScore[]) => {
 
 // Get top high scores - only returns top 10
 export async function GET() {
-  const highScores = getHighScores();
+  const highScores = await getHighScores();
   
   // Sort by score (descending) and take top 10
   const topScores = highScores
@@ -149,7 +146,7 @@ export async function POST(request: Request) {
       : 'Anonymous';
     
     // Get existing high scores
-    const highScores = getHighScores();
+    const highScores = await getHighScores();
     
     // Check if this device already has a high score
     const existingScoreIndex = highScores.findIndex(s => s.id === deviceId);
@@ -175,14 +172,14 @@ export async function POST(request: Request) {
     // Sort by score (descending)
     highScores.sort((a, b) => b.score - a.score);
     
-    // Get top 10 scores
+    // Keep all scores but get top 10 for response
     const topScores = highScores.slice(0, 10);
     
     // Find user rank
     const rank = highScores.findIndex(item => item.id === deviceId) + 1;
     
     // Save the updated high scores
-    saveHighScores(topScores);
+    await saveHighScores(highScores);
     
     return NextResponse.json({
       topScores,
