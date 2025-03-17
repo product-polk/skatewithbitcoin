@@ -6,7 +6,7 @@ type SoundType = 'jump' | 'crash' | 'music' | 'score' | 'trick';
 
 class SoundManager {
   private sounds: Map<SoundType, HTMLAudioElement> = new Map();
-  private musicVolume: number = 0.165;
+  private musicVolume: number = 0.08;
   private sfxVolume: number = 0.275;
   private muted: boolean = false;
 
